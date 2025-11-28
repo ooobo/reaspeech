@@ -15,6 +15,14 @@ ReaSpeechAPI = {
 function ReaSpeechAPI:init(executable_path)
   self.executable_path, self.is_standalone = self:find_executable(executable_path)
   self.python_cmd = self:get_python_command()
+
+  -- Log which executable mode we're using
+  if self.is_standalone then
+    reaper.ShowConsoleMsg("ReaSpeech: Using standalone executable: " .. self.executable_path .. "\n")
+  else
+    reaper.ShowConsoleMsg("ReaSpeech: Using Python script: " .. self.executable_path .. "\n")
+    reaper.ShowConsoleMsg("ReaSpeech: Python command: " .. self.python_cmd .. "\n")
+  end
 end
 
 function ReaSpeechAPI:get_python_command()
@@ -100,6 +108,9 @@ function ReaSpeechAPI:transcribe(audio_file, options)
   end
 
   local command = table.concat(command_parts, " ")
+
+  -- Log the command being executed
+  reaper.ShowConsoleMsg("ReaSpeech: Executing command: " .. command .. "\n")
 
   local request = ProcessExecutor().async {
     command = command,

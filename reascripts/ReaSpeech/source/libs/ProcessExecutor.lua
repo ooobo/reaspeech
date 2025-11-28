@@ -109,6 +109,7 @@ function ProcessExecutor._init()
     end
 
     -- Read new lines
+    local new_lines = 0
     for line in f:lines() do
       if line and line:match('^{') then
         local success, segment = pcall(function()
@@ -117,11 +118,16 @@ function ProcessExecutor._init()
 
         if success and segment then
           table.insert(self.segments, segment)
-          self:debug("Received segment: " .. (segment.text or ""))
+          new_lines = new_lines + 1
+          reaper.ShowConsoleMsg("ReaSpeech: Received segment " .. #self.segments .. ": " .. (segment.text or "") .. "\n")
         else
-          self:debug("Failed to parse JSON: " .. line)
+          reaper.ShowConsoleMsg("ReaSpeech: Failed to parse JSON: " .. line .. "\n")
         end
       end
+    end
+
+    if new_lines > 0 then
+      reaper.ShowConsoleMsg("ReaSpeech: Total segments received: " .. #self.segments .. "\n")
     end
 
     -- Save current position
@@ -135,16 +141,26 @@ function ProcessExecutor._init()
       return
     end
 
-    self.stderr_content = f:read("*all")
+    local new_content = f:read("*all")
     f:close()
 
-    -- Log progress messages
-    for line in self.stderr_content:gmatch("[^\n]+") do
-      if line:match("^ERROR:") then
-        self:log(line)
-      else
-        self:debug(line)
+    -- Only log new content (not what we've already seen)
+    if new_content ~= self.stderr_content then
+      local old_len = #self.stderr_content
+      local new_lines = new_content:sub(old_len + 1)
+
+      -- Log new progress messages to console
+      for line in new_lines:gmatch("[^\n]+") do
+        if line ~= "" then
+          if line:match("^ERROR:") then
+            reaper.ShowConsoleMsg("ReaSpeech ERROR: " .. line .. "\n")
+          else
+            reaper.ShowConsoleMsg("ReaSpeech: " .. line .. "\n")
+          end
+        end
       end
+
+      self.stderr_content = new_content
     end
   end
 
@@ -216,12 +232,18 @@ function ProcessExecutor._init()
     -- Create background process that redirects stdout and stderr
     local cmd_with_redirect = command .. ' > "' .. self.stdout_file .. '" 2> "' .. self.stderr_file .. '"'
 
+    reaper.ShowConsoleMsg("ReaSpeech: Starting background process...\n")
+    reaper.ShowConsoleMsg("ReaSpeech: stdout -> " .. self.stdout_file .. "\n")
+    reaper.ShowConsoleMsg("ReaSpeech: stderr -> " .. self.stderr_file .. "\n")
+
     local result = ExecProcess.new(cmd_with_redirect):background()
 
     if not result then
       local err = "Unable to run command"
-      self:log(err)
+      reaper.ShowConsoleMsg("ReaSpeech ERROR: " .. err .. "\n")
       self.error_handler(err)
+    else
+      reaper.ShowConsoleMsg("ReaSpeech: Background process started successfully\n")
     end
 
     return self
