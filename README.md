@@ -2,17 +2,46 @@
 ![Lint & Test](https://github.com/teamaudio/reaspeech/actions/workflows/check-reascripts.yml/badge.svg)
 
 ### Painless speech-to-text transcription inside of REAPER
-ReaSpeech is a ReaScript frontend that will take your project's media items and run them through a Docker-hosted Whisper backend, building a searchable, project-marker based index of the resulting transcription. That's right - not only do you reap (zing!) the benefits of a staff of transcribers, but you get to add "familiar with Docker" to your resume.
+ReaSpeech is a ReaScript frontend that will take your project's media items and run them through Whisper for speech-to-text transcription, building a searchable, project-marker based index of the resulting transcription.
 
 ![Screenshot](docs/assets/img/reaspeech-screenshot.png)
 
 # Quick Usage
 
-* Install [Docker](https://www.docker.com/)
-* Run the [Docker image](https://hub.docker.com/r/techaudiodoc/reaspeech)
-* Navigate to [localhost:9000](http://localhost:9000/)
+## Local Executable Backend (Recommended)
 
-## Docker Commands
+This version uses a local Python script instead of Docker, making it simpler and faster to set up.
+
+### Requirements
+
+* Python 3.8 or higher
+* ReaImGui (REAPER extension)
+* Whisper model dependencies (installed automatically on first run)
+
+### Installation
+
+1. Install ReaImGui from [ReaPack](https://reapack.com/)
+2. Install Python dependencies:
+   ```bash
+   pip install torch whisper faster-whisper
+   ```
+3. Copy the ReaSpeech folder to your REAPER Scripts directory
+4. Run the ReaSpeech script from REAPER
+
+The first time you run a transcription, Whisper will download the selected model (this may take a few minutes).
+
+### GPU Acceleration
+
+For faster transcription with NVIDIA GPUs, install the CUDA-enabled version of PyTorch:
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cu118
+```
+
+For Apple Silicon Macs, the Metal Performance Shaders (MPS) backend is used automatically.
+
+## Docker Backend (Legacy)
+
+The Docker backend is still available but is no longer the recommended approach. See [Docker Usage](docs/docker.md) for details.
 
 ### CPU
 
@@ -21,10 +50,6 @@ ReaSpeech is a ReaScript frontend that will take your project's media items and 
 ### GPU: Windows/NVIDIA
 
     docker run -d --gpus all -p 9000:9000 --name reaspeech-gpu techaudiodoc/reaspeech:latest-gpu
-
-### GPU: Apple Silicon
-
-Please see our [Apple Silicon GPU instructions](docs/no-docker.md#apple-silicon-gpu)
 
 ---
 

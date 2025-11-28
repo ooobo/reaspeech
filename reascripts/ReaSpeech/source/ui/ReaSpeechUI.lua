@@ -36,7 +36,7 @@ function ReaSpeechUI:init()
   self.requests = {}
   self.responses = {}
 
-  ReaSpeechAPI:init(Script.host, Script.protocol)
+  ReaSpeechAPI:init(Script.executable_path)
 
   self.worker = ReaSpeechWorker.new({
     requests = self.requests,

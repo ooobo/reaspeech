@@ -44,11 +44,10 @@ for _, source_dir in pairs({'../vendor', '../resources', 'libs', 'ui', 'main'}) 
   recursive_dofile(script_path .. 'source/' .. source_dir)
 end
 
--- We're not inside of docker! We're undocked!
+-- Local executable backend (no Docker needed!)
 Script = {
   name = "ReaSpeechDev",
-  host = "localhost:9000",
-  protocol = "http:",
+  executable_path = nil, -- Will use default path relative to script
   env = "production",
   lua = _VERSION:match('[%d.]+'),
   timeout = 30000,

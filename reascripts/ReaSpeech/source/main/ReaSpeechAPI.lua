@@ -2,64 +2,97 @@
 
   ReaSpeechAPI.lua - ReaSpeech API client
 
+  Modified to use local executable instead of HTTP/Docker backend
+
 ]]--
 
 ReaSpeechAPI = {
-  CURL_TIMEOUT_SECONDS = 5,
-  base_url = nil,
+  executable_path = nil,
+  python_cmd = nil,
 }
 
-function ReaSpeechAPI:init(host, protocol)
-  protocol = protocol or 'http:'
-  self.base_url = protocol .. '//' .. host
+function ReaSpeechAPI:init(executable_path)
+  self.executable_path = executable_path or self:get_default_executable_path()
+  self.python_cmd = self:get_python_command()
 end
 
-function ReaSpeechAPI:get_api_url(remote_path)
-  local remote_path_no_leading_slash = remote_path:gsub("^/+", "")
-  return ("%s/%s"):format(self.base_url, url.quote(remote_path_no_leading_slash))
+function ReaSpeechAPI:get_python_command()
+  -- Try to find Python 3
+  if EnvUtil.is_windows() then
+    -- On Windows, try python, python3, py -3
+    return "python"
+  else
+    -- On Unix-like systems, try python3 first
+    return "python3"
+  end
 end
 
--- Fetch simple JSON responses. Will block until result or curl timeout.
--- For large amounts of data, use fetch_large instead.
-function ReaSpeechAPI:fetch_json(url_path, http_method, error_handler, timeout_handler)
-  local request = CurlRequest().new {
-    url = self:get_api_url(url_path),
-    method = http_method or 'GET',
-    curl_timeout = self.CURL_TIMEOUT_SECONDS,
-    extra_curl_options = {
-      '-s' -- silent mode
-    },
-    error_handler = error_handler or function(_msg) end,
-    timeout_handler = timeout_handler or function() end,
+function ReaSpeechAPI:get_default_executable_path()
+  -- Get the script directory
+  local script_path = ({reaper.get_action_context()})[2]
+  local script_dir = script_path:match("(.-)([^/\\]+)$")
+
+  -- Default to python/parakeet_transcribe.py relative to script
+  return script_dir .. "python/parakeet_transcribe.py"
+end
+
+function ReaSpeechAPI:quote_path(path)
+  if EnvUtil.is_windows() then
+    return '"' .. path .. '"'
+  else
+    return "'" .. path:gsub("'", "'\\''") .. "'"
+  end
+end
+
+-- Execute transcription on an audio file
+-- Returns a ProcessExecutor instance that can be polled for results
+function ReaSpeechAPI:transcribe(audio_file, options)
+  local model = options.model or "small"
+  local language = options.language
+  local word_timestamps = options.word_timestamps or false
+
+  local command_parts = {
+    self.python_cmd,
+    self:quote_path(self.executable_path),
+    "transcribe",
+    self:quote_path(audio_file),
+    "--model", model,
+  }
+
+  if language then
+    table.insert(command_parts, "--language")
+    table.insert(command_parts, language)
+  end
+
+  if word_timestamps then
+    table.insert(command_parts, "--word-timestamps")
+  end
+
+  local command = table.concat(command_parts, " ")
+
+  local request = ProcessExecutor().async {
+    command = command,
+    error_handler = options.error_handler or function(_msg) end,
   }
 
   return request:execute()
 end
 
--- Requests data that may be large or time-consuming.
--- This method is non-blocking, and does not give any indication that it has
--- completed. The path to the output file is returned.
-function ReaSpeechAPI:fetch_large(url_path, http_method)
-  local request = CurlRequest().async {
-    url = self:get_api_url(url_path),
-    method = http_method or 'GET',
+-- Detect language of an audio file
+-- Returns a ProcessExecutor instance that can be polled for results
+function ReaSpeechAPI:detect_language(audio_file, options)
+  local command_parts = {
+    self.python_cmd,
+    self:quote_path(self.executable_path),
+    "detect-language",
+    self:quote_path(audio_file),
   }
 
-  return request:execute()
-end
+  local command = table.concat(command_parts, " ")
 
--- Uploads a file to start a request for processing.
--- This method is non-blocking, and does not give any indication that it has
--- completed. The path to the output file is returned.
-function ReaSpeechAPI:post_request(url_path, data, file_uploads)
-  local request = CurlRequest().async {
-    url = self:get_api_url(url_path),
-    method = 'POST',
-    headers = {
-      ['Content-Type'] = 'multipart/form-data',
-    },
-    query_data = data,
-    file_uploads = file_uploads or {},
+  local request = ProcessExecutor().async {
+    command = command,
+    error_handler = options.error_handler or function(_msg) end,
   }
 
   return request:execute()
