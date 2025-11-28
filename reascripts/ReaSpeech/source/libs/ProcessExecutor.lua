@@ -230,9 +230,19 @@ function ProcessExecutor._init()
 
   function API:execute_async(command)
     -- Create background process that redirects stdout and stderr
-    local cmd_with_redirect = command .. ' > "' .. self.stdout_file .. '" 2> "' .. self.stderr_file .. '"'
+    local cmd_with_redirect
+
+    -- On Windows, we need to wrap in cmd /c for redirection to work
+    if EnvUtil.is_windows() then
+      -- Use cmd /c to handle redirection properly on Windows
+      cmd_with_redirect = 'cmd /c "' .. command .. ' > ' .. self.stdout_file .. ' 2> ' .. self.stderr_file .. '"'
+    else
+      -- Unix-like systems can handle redirection directly
+      cmd_with_redirect = command .. ' > "' .. self.stdout_file .. '" 2> "' .. self.stderr_file .. '"'
+    end
 
     reaper.ShowConsoleMsg("ReaSpeech: Starting background process...\n")
+    reaper.ShowConsoleMsg("ReaSpeech: Full command: " .. cmd_with_redirect .. "\n")
     reaper.ShowConsoleMsg("ReaSpeech: stdout -> " .. self.stdout_file .. "\n")
     reaper.ShowConsoleMsg("ReaSpeech: stderr -> " .. self.stderr_file .. "\n")
 
