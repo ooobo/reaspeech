@@ -75,11 +75,12 @@ function ProcessExecutor._init()
     self:read_stderr()
 
     -- Check if process completed
-    -- For now, we'll consider it complete when stderr contains "complete"
-    -- or when we can no longer read the files
-    if self.stderr_content:match("Transcription complete") or
+    -- The Python script outputs "Processing time: X.XXs" when done
+    if self.stderr_content:match("Processing time:") or
        self.stderr_content:match("ERROR:") then
       self.complete = true
+
+      reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
 
       -- Clean up temp files
       Tempfile:remove(self.stdout_file)
