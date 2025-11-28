@@ -108,20 +108,122 @@ def tokens_to_sentences(tokens, timestamps):
 
     return sentences
 
+def load_audio_with_ffmpeg(audio_path):
+    """
+    Load audio using ffmpeg via subprocess (handles ANY audio format).
+    Returns audio as float32 numpy array at 16kHz mono.
+
+    This approach works with WAV, MP3, BWF, FLAC, etc. - anything ffmpeg supports.
+    """
+    import subprocess
+
+    # Use ffmpeg to convert to 16kHz mono PCM
+    cmd = [
+        'ffmpeg',
+        '-i', audio_path,
+        '-f', 's16le',  # 16-bit PCM
+        '-acodec', 'pcm_s16le',
+        '-ar', '16000',  # 16kHz
+        '-ac', '1',      # mono
+        '-'              # output to stdout
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, check=True)
+        audio_bytes = result.stdout
+
+        # Convert bytes to numpy array
+        audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+
+        return audio
+
+    except subprocess.CalledProcessError as e:
+        raise Exception(f"ffmpeg failed to load audio: {e.stderr.decode()}")
+    except FileNotFoundError:
+        raise Exception("ffmpeg not found. Please install ffmpeg.")
+
+
 def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_duration=15.0):
     """
     Transcribe audio file with chunking for long files, preserving timestamps.
-    Memory-efficient: processes chunks on-demand without loading entire file.
+    Uses ffmpeg for audio loading to support all formats (WAV, MP3, BWF, FLAC, etc.)
 
     Args:
         asr: ASR model instance (with timestamps)
-        audio_path: Path to audio file
+        audio_path: Path to audio file (any format ffmpeg supports)
         chunk_duration: Duration of each chunk in seconds
         overlap_duration: Overlap between chunks in seconds
 
     Returns:
         List of sentence dicts with {text, start, end}
     """
+
+    # Load entire audio file with ffmpeg (supports all formats)
+    print(f"Loading audio file: {audio_path}", file=sys.stderr)
+    audio = load_audio_with_ffmpeg(audio_path)
+
+    duration = len(audio) / 16000.0  # 16kHz sample rate
+    print(f"Audio duration: {duration:.1f}s", file=sys.stderr)
+
+    if duration <= chunk_duration:
+        # Short file - process in one go
+        result = asr.recognize(audio, sample_rate=16000)
+        if hasattr(result, 'tokens') and hasattr(result, 'timestamps'):
+            return tokens_to_sentences(result.tokens, result.timestamps)
+        else:
+            text = result.text if hasattr(result, 'text') else str(result)
+            return [{'text': text, 'start': 0.0, 'end': duration}]
+
+    # Long file - process in chunks
+    print(f"Processing {duration:.1f}s audio in chunks of {chunk_duration}s...", file=sys.stderr)
+
+    all_tokens = []
+    all_timestamps = []
+
+    chunk_samples = int(chunk_duration * 16000)
+    overlap_samples = int(overlap_duration * 16000)
+    stride = chunk_samples - overlap_samples
+
+    total_samples = len(audio)
+    total_chunks = (total_samples - overlap_samples - 1) // stride + 1 if total_samples > chunk_samples else 1
+
+    chunk_idx = 0
+    for start in range(0, total_samples, stride):
+        end = min(start + chunk_samples, total_samples)
+        chunk = audio[start:end]
+
+        chunk_start = start / 16000.0
+        chunk_end = end / 16000.0
+
+        print(f"Processing chunk {chunk_idx+1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)...", file=sys.stderr)
+        result = asr.recognize(chunk, sample_rate=16000)
+
+        if hasattr(result, 'tokens') and hasattr(result, 'timestamps'):
+            adjusted_timestamps = [ts + chunk_start for ts in result.timestamps]
+
+            if chunk_idx > 0 and all_timestamps:
+                last_prev_time = all_timestamps[-1]
+                overlap_end = chunk_start + overlap_duration
+
+                filtered_tokens = []
+                filtered_timestamps = []
+                for token, ts in zip(result.tokens, adjusted_timestamps):
+                    if ts >= overlap_end or ts > last_prev_time:
+                        filtered_tokens.append(token)
+                        filtered_timestamps.append(ts)
+
+                all_tokens.extend(filtered_tokens)
+                all_timestamps.extend(filtered_timestamps)
+            else:
+                all_tokens.extend(result.tokens)
+                all_timestamps.extend(adjusted_timestamps)
+
+        chunk_idx += 1
+        if end >= total_samples:
+            break
+
+    # Remove old soundfile-based chunking code below
+    '''
     import soundfile as sf
 
     with sf.SoundFile(audio_path) as f:
