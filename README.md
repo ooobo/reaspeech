@@ -16,28 +16,32 @@ This version uses a local Python script instead of Docker, making it simpler and
 
 * Python 3.8 or higher
 * ReaImGui (REAPER extension)
-* Whisper model dependencies (installed automatically on first run)
+* Parakeet TDT model dependencies (installed automatically on first run)
 
 ### Installation
 
 1. Install ReaImGui from [ReaPack](https://reapack.com/)
 2. Install Python dependencies:
    ```bash
-   pip install torch whisper faster-whisper
+   pip install onnx-asr onnxruntime huggingface-hub soundfile numpy
    ```
 3. Copy the ReaSpeech folder to your REAPER Scripts directory
 4. Run the ReaSpeech script from REAPER
 
-The first time you run a transcription, Whisper will download the selected model (this may take a few minutes).
+The first time you run a transcription, the Parakeet model will be downloaded automatically (this may take a few minutes).
 
-### GPU Acceleration
+### Optional: Standalone Executable
 
-For faster transcription with NVIDIA GPUs, install the CUDA-enabled version of PyTorch:
+For better performance and simpler deployment, you can build a standalone executable:
+
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu118
+cd python
+./build_executable.sh  # On Linux/macOS
+# or
+build_executable.bat   # On Windows
 ```
 
-For Apple Silicon Macs, the Metal Performance Shaders (MPS) backend is used automatically.
+This creates a self-contained executable with all dependencies bundled.
 
 ## Docker Backend (Legacy)
 

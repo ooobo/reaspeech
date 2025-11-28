@@ -44,7 +44,7 @@ function ASRControls:init()
     translate = storage:boolean('translate', false),
     hotwords = storage:string('hotwords', ''),
     initial_prompt = storage:string('initial_prompt', ''),
-    model_name = storage:string('model_name', self.DEFAULT_MODEL_NAME),
+    model_name = storage:string('model_name', 'nemo-parakeet-tdt-0.6b-v2'),
     vad_filter = storage:boolean('vad_filter', true),
   }
 
@@ -104,9 +104,9 @@ end
 function ASRControls:init_asr_info()
   -- For local executable backend, set defaults directly
   -- No need for HTTP request to get engine info
-  self.asr_engine = 'faster_whisper'
+  self.asr_engine = 'parakeet'
   self.asr_options = {
-    language = true,
+    language = false,  -- Parakeet currently doesn't support language selection
     word_timestamps = true,
     -- Note: These options are not yet supported in local executable
     -- vad_filter = false,

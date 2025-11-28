@@ -47,25 +47,19 @@ end
 -- Execute transcription on an audio file
 -- Returns a ProcessExecutor instance that can be polled for results
 function ReaSpeechAPI:transcribe(audio_file, options)
-  local model = options.model or "small"
-  local language = options.language
-  local word_timestamps = options.word_timestamps or false
+  local model = options.model or "nemo-parakeet-tdt-0.6b-v2"
 
+  -- Build command: python parakeet_transcribe.py audio_file [--model MODEL]
   local command_parts = {
     self.python_cmd,
     self:quote_path(self.executable_path),
-    "transcribe",
     self:quote_path(audio_file),
-    "--model", model,
   }
 
-  if language then
-    table.insert(command_parts, "--language")
-    table.insert(command_parts, language)
-  end
-
-  if word_timestamps then
-    table.insert(command_parts, "--word-timestamps")
+  -- Only add --model if it's not the default
+  if model and model ~= "nemo-parakeet-tdt-0.6b-v2" then
+    table.insert(command_parts, "--model")
+    table.insert(command_parts, model)
   end
 
   local command = table.concat(command_parts, " ")
@@ -79,19 +73,11 @@ function ReaSpeechAPI:transcribe(audio_file, options)
 end
 
 -- Detect language of an audio file
--- Returns a ProcessExecutor instance that can be polled for results
+-- Note: Parakeet doesn't support language detection yet
+-- This is a placeholder for future implementation
 function ReaSpeechAPI:detect_language(audio_file, options)
-  local command_parts = {
-    self.python_cmd,
-    self:quote_path(self.executable_path),
-    "detect-language",
-    self:quote_path(audio_file),
-  }
-
-  local command = table.concat(command_parts, " ")
-
   local request = ProcessExecutor().async {
-    command = command,
+    command = "echo '{\"language\": \"en\"}'",
     error_handler = options.error_handler or function(_msg) end,
   }
 
