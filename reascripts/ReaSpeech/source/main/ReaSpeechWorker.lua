@@ -36,7 +36,7 @@ function ReaSpeechWorker:interval_functions()
 
   self._interval_functions = {
     IntervalFunction().new(0.3, function () self:react_handle_request() end),
-    IntervalFunction().new(0.5, function () self:react_handle_jobs() end),
+    IntervalFunction().new(2.0, function () self:react_handle_jobs() end),  -- Reduced from 0.5s to reduce file I/O contention
   }
 
   return self._interval_functions

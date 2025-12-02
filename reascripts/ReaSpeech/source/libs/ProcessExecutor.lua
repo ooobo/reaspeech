@@ -68,10 +68,7 @@ function ProcessExecutor._init()
       return false
     end
 
-    -- Read new output from stdout
-    self:read_stdout()
-
-    -- Read stderr for progress/errors
+    -- Only read stderr during processing (stdout only written at completion)
     self:read_stderr()
 
     -- Check if process completed
@@ -79,6 +76,9 @@ function ProcessExecutor._init()
     if self.stderr_content:match("Processing time:") or
        self.stderr_content:match("ERROR:") then
       self.complete = true
+
+      -- Now read stdout for all the segments (only read once at completion)
+      self:read_stdout()
 
       reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
 
