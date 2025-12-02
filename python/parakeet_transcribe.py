@@ -206,6 +206,8 @@ def main():
     progress_file = open(args.progress_file, 'w', encoding='utf-8') if args.progress_file else sys.stderr
 
     try:
+        print(f"[TIMING] Transcription started at {time.time():.3f}", file=progress_file)
+        progress_file.flush()
         start_time = time.time()
 
         quantization = None if args.quantization.lower() == 'none' else args.quantization
@@ -222,7 +224,8 @@ def main():
             output_file.close()
 
         elapsed = time.time() - start_time
-        print(f"Processing time: {elapsed:.2f}s", file=progress_file)
+        print(f"[TIMING] Transcription completed at {time.time():.3f}", file=progress_file)
+        print(f"[TIMING] Total processing time: {elapsed:.2f}s", file=progress_file)
         progress_file.flush()
 
     except Exception as e:

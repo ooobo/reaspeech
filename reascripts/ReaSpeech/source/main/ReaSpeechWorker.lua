@@ -192,9 +192,13 @@ function ReaSpeechWorker:start_active_job()
   local active_job = self.active_job
   local request_type = active_job.request_type or 'transcribe'
 
+  -- Record start time for performance measurement
+  active_job.start_time = reaper.time_precise()
+
   reaper.ShowConsoleMsg("ReaSpeech: Starting job - " .. request_type .. "\n")
   reaper.ShowConsoleMsg("ReaSpeech: Audio file: " .. (active_job.audio_file or "unknown") .. "\n")
   reaper.ShowConsoleMsg("ReaSpeech: Model: " .. (active_job.options.model or "default") .. "\n")
+  reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Job started at %.3f\n", active_job.start_time))
 
   -- Start process based on request type
   if request_type == 'detect_language' then
@@ -220,7 +224,14 @@ function ReaSpeechWorker:check_active_job()
 
   -- Check if process is ready
   if active_job.process:ready() then
+    -- Calculate elapsed time
+    local end_time = reaper.time_precise()
+    local elapsed = end_time - (active_job.start_time or end_time)
+
     reaper.ShowConsoleMsg("ReaSpeech: Job completed!\n")
+    reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Job completed at %.3f\n", end_time))
+    reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Total wall-clock time: %.2fs\n", elapsed))
+
     self:handle_job_completion(active_job)
   elseif active_job.process:error() then
     reaper.ShowConsoleMsg("ReaSpeech: Job failed with error: " .. active_job.process:error() .. "\n")

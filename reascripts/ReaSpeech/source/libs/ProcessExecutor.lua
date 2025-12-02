@@ -35,6 +35,7 @@ function ProcessExecutor._init()
     options.error_msg = nil
     options.output_position = 0
     options.progress_content = ""
+    options.process_start_time = nil
 
     return API.new(options)
   end
@@ -79,6 +80,10 @@ function ProcessExecutor._init()
         -- Process complete! Now read the results
         self.complete = true
 
+        -- Calculate process execution time
+        local process_end_time = reaper.time_precise()
+        local process_elapsed = self.process_start_time and (process_end_time - self.process_start_time) or 0
+
         -- Read progress file to check for errors
         self:read_progress()
 
@@ -86,6 +91,9 @@ function ProcessExecutor._init()
         self:read_output()
 
         reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
+        if self.process_start_time then
+          reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Process execution time: %.2fs\n", process_elapsed))
+        end
 
         -- Clean up temp files
         Tempfile:remove(self.output_file)
@@ -212,6 +220,10 @@ function ProcessExecutor._init()
     reaper.ShowConsoleMsg("ReaSpeech: Full command: " .. command .. "\n")
     reaper.ShowConsoleMsg("ReaSpeech: output -> " .. self.output_file .. "\n")
     reaper.ShowConsoleMsg("ReaSpeech: progress -> " .. self.progress_file .. "\n")
+
+    -- Record process start time
+    self.process_start_time = reaper.time_precise()
+    reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Process started at %.3f\n", self.process_start_time))
 
     local result = ExecProcess.new(command):background()
 
