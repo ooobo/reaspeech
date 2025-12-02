@@ -15,18 +15,27 @@ This version uses a local Python script instead of Docker, making it simpler and
 ### Requirements
 
 * Python 3.8 or higher
+* FFmpeg (for audio format conversion)
 * ReaImGui (REAPER extension)
 * Parakeet TDT model dependencies (installed automatically on first run)
 
 ### Installation
 
-1. Install ReaImGui from [ReaPack](https://reapack.com/)
-2. Install Python dependencies:
+1. **Install FFmpeg:**
+   - Windows: `choco install ffmpeg` (using [Chocolatey](https://chocolatey.org/))
+   - macOS: `brew install ffmpeg` (using [Homebrew](https://brew.sh/))
+   - Linux: `sudo apt install ffmpeg` (Ubuntu/Debian) or equivalent for your distro
+
+2. Install ReaImGui from [ReaPack](https://reapack.com/)
+
+3. Install Python dependencies:
    ```bash
-   pip install onnx-asr onnxruntime huggingface-hub soundfile numpy
+   pip install onnx-asr onnxruntime ffmpeg-python numpy
    ```
-3. Copy the ReaSpeech folder to your REAPER Scripts directory
-4. Run the ReaSpeech script from REAPER
+
+4. Copy the ReaSpeech folder to your REAPER Scripts directory
+
+5. Run the ReaSpeech script from REAPER
 
 The first time you run a transcription, the Parakeet model will be downloaded automatically (this may take a few minutes).
 
@@ -41,7 +50,9 @@ cd python
 build_executable.bat   # On Windows
 ```
 
-This creates a self-contained executable with all dependencies bundled.
+This creates a self-contained executable with all Python dependencies bundled.
+
+**Note:** FFmpeg must still be installed on the system and available in your PATH.
 
 ## Docker Backend (Legacy)
 
