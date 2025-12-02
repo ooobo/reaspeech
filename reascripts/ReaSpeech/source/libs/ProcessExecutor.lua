@@ -109,8 +109,7 @@ function ProcessExecutor._init()
       f:seek("set", self.stdout_position)
     end
 
-    -- Read new lines
-    local new_lines = 0
+    -- Read new lines and parse JSON segments
     for line in f:lines() do
       if line and line:match('^{') then
         local success, segment = pcall(function()
@@ -119,16 +118,8 @@ function ProcessExecutor._init()
 
         if success and segment then
           table.insert(self.segments, segment)
-          new_lines = new_lines + 1
-          reaper.ShowConsoleMsg("ReaSpeech: Received segment " .. #self.segments .. ": " .. (segment.text or "") .. "\n")
-        else
-          reaper.ShowConsoleMsg("ReaSpeech: Failed to parse JSON: " .. line .. "\n")
         end
       end
-    end
-
-    if new_lines > 0 then
-      reaper.ShowConsoleMsg("ReaSpeech: Total segments received: " .. #self.segments .. "\n")
     end
 
     -- Save current position
@@ -180,26 +171,29 @@ function ProcessExecutor._init()
   end
 
   function API:progress()
-    -- Parse progress from stderr
-    -- Look for messages like "Processed X segments..."
-    local segment_count = self.stderr_content:match("Processed (%d+) segments")
+    -- Parse chunk progress from stderr messages like "Processing chunk 2/6 ..."
+    -- We need to find the LAST occurrence to get current progress
+    local current_chunk, total_chunks
 
-    if segment_count then
-      -- Return progress as percentage (rough estimate)
-      -- Since we don't know total, just return number of segments processed
-      return tonumber(segment_count) or 0
+    for chunk_line in self.stderr_content:gmatch("[^\n]+") do
+      local curr, total = chunk_line:match("Processing chunk (%d+)/(%d+)")
+      if curr and total then
+        current_chunk = tonumber(curr)
+        total_chunks = tonumber(total)
+      end
     end
 
-    -- Check if we're in various stages
-    if self.stderr_content:match("Loading model") then
-      return 1
-    elseif self.stderr_content:match("Loading audio") then
+    if current_chunk and total_chunks and total_chunks > 0 then
+      -- Return progress as percentage (0-100)
+      -- For chunk 1/6, return ~16.67%, for 6/6 return 100%
+      return (current_chunk / total_chunks) * 100
+    end
+
+    -- Check if we're in early stages (before chunking starts)
+    if self.stderr_content:match("Loading audio") then
       return 5
-    elseif self.stderr_content:match("Starting transcription") then
+    elseif self.stderr_content:match("Audio duration:") then
       return 10
-    elseif #self.segments > 0 then
-      -- Return segments processed as progress
-      return 10 + #self.segments
     end
 
     return 0
