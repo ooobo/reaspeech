@@ -18,11 +18,15 @@ import argparse
 import json
 from pathlib import Path
 import numpy as np
+import ffmpeg
 
 os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
 os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
 
 from onnx_asr import load_model
+
+SAMPLE_RATE = 16000
+FFMPEG_BIN = os.getenv("FFMPEG_BIN", "ffmpeg")
 
 def tokens_to_sentences(tokens, timestamps):
     """
@@ -68,39 +72,27 @@ def tokens_to_sentences(tokens, timestamps):
 
     return sentences
 
-def load_audio_with_ffmpeg(audio_path):
+def load_audio_with_ffmpeg(audio_path, sr=SAMPLE_RATE):
     """
-    Load audio using ffmpeg via subprocess (handles ANY audio format).
-    Returns audio as float32 numpy array at 16kHz mono.
+    Load audio using ffmpeg-python library (handles ANY audio format).
+    Returns audio as float32 numpy array at specified sample rate (default 16kHz mono).
 
     This approach works with WAV, MP3, BWF, FLAC, etc. - anything ffmpeg supports.
+    Based on the original ReaSpeech backend implementation.
     """
-    import subprocess
-
-    # Use ffmpeg to convert to 16kHz mono PCM
-    cmd = [
-        'ffmpeg',
-        '-i', audio_path,
-        '-f', 's16le',  # 16-bit PCM
-        '-acodec', 'pcm_s16le',
-        '-ar', '16000',  # 16kHz
-        '-ac', '1',      # mono
-        '-'              # output to stdout
-    ]
-
     try:
-        result = subprocess.run(cmd, capture_output=True, check=True)
-        audio_bytes = result.stdout
+        # Use ffmpeg-python to decode audio while down-mixing and resampling
+        # This launches ffmpeg subprocess internally
+        out, _ = (
+            ffmpeg.input(audio_path, threads=0)
+            .output("-", format="s16le", acodec="pcm_s16le", ac=1, ar=sr)
+            .run(cmd=FFMPEG_BIN, capture_stdout=True, capture_stderr=True)
+        )
+    except ffmpeg.Error as e:
+        raise RuntimeError(f"Failed to load audio: {e.stderr.decode()}") from e
 
-        # Convert bytes to numpy array
-        audio = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-
-        return audio
-
-    except subprocess.CalledProcessError as e:
-        raise Exception(f"ffmpeg failed to load audio: {e.stderr.decode()}")
-    except FileNotFoundError:
-        raise Exception("ffmpeg not found. Please install ffmpeg.")
+    # Convert bytes to numpy array
+    return np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
 
 
 def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_duration=15.0):
@@ -120,14 +112,14 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
 
     # Load entire audio file with ffmpeg (supports all formats)
     print(f"Loading audio file: {audio_path}", file=sys.stderr)
-    audio = load_audio_with_ffmpeg(audio_path)
+    audio = load_audio_with_ffmpeg(audio_path, sr=SAMPLE_RATE)
 
-    duration = len(audio) / 16000.0  # 16kHz sample rate
+    duration = len(audio) / SAMPLE_RATE
     print(f"Audio duration: {duration:.1f}s", file=sys.stderr)
 
     if duration <= chunk_duration:
         # Short file - process in one go
-        result = asr.recognize(audio, sample_rate=16000)
+        result = asr.recognize(audio, sample_rate=SAMPLE_RATE)
         if hasattr(result, 'tokens') and hasattr(result, 'timestamps'):
             return tokens_to_sentences(result.tokens, result.timestamps)
         else:
@@ -140,8 +132,8 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
     all_tokens = []
     all_timestamps = []
 
-    chunk_samples = int(chunk_duration * 16000)
-    overlap_samples = int(overlap_duration * 16000)
+    chunk_samples = int(chunk_duration * SAMPLE_RATE)
+    overlap_samples = int(overlap_duration * SAMPLE_RATE)
     stride = chunk_samples - overlap_samples
 
     total_samples = len(audio)
@@ -152,11 +144,11 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
         end = min(start + chunk_samples, total_samples)
         chunk = audio[start:end]
 
-        chunk_start = start / 16000.0
-        chunk_end = end / 16000.0
+        chunk_start = start / SAMPLE_RATE
+        chunk_end = end / SAMPLE_RATE
 
         print(f"Processing chunk {chunk_idx+1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)...", file=sys.stderr)
-        result = asr.recognize(chunk, sample_rate=16000)
+        result = asr.recognize(chunk, sample_rate=SAMPLE_RATE)
 
         if hasattr(result, 'tokens') and hasattr(result, 'timestamps'):
             adjusted_timestamps = [ts + chunk_start for ts in result.timestamps]

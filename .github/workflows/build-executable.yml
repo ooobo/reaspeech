@@ -27,12 +27,17 @@ jobs:
       with:
         python-version: '3.11'
 
+    - name: Install FFmpeg
+      run: |
+        choco install ffmpeg -y
+        ffmpeg -version
+
     - name: Install dependencies
       working-directory: python
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
-        pip install onnx-asr onnxruntime numpy huggingface-hub
+        pip install onnx-asr onnxruntime numpy ffmpeg-python huggingface-hub
 
     - name: Build executable
       working-directory: python
