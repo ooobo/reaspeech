@@ -201,7 +201,7 @@ def main():
         sentences = transcribe_with_chunking(asr, str(audio_file), chunk_duration=args.chunk_duration)
 
         for segment in sentences:
-            print(json.dumps(segment), flush=True)
+            print(json.dumps(segment))
 
         elapsed = time.time() - start_time
         print(f"Processing time: {elapsed:.2f}s", file=sys.stderr)
