@@ -32,7 +32,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
-        pip install onnx-asr onnxruntime numpy
+        pip install onnx-asr onnxruntime numpy huggingface-hub
 
     - name: Build executable
       working-directory: python
