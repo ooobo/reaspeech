@@ -4,12 +4,16 @@ local lu = require('vendor/luaunit')
 
 require('tests/mock_reaper')
 
+require('libs/EnvUtil')
+require('libs/ExecProcess')
 require('libs/ImGuiTheme')
 require('libs/Logging')
 require('libs/Polo')
+require('libs/ProcessExecutor')
 require('libs/ReaIter')
 require('libs/ReaUtil')
 require('libs/Storage')
+require('libs/Tempfile')
 require('libs/ToolWindow')
 require('libs/Trap')
 
@@ -51,7 +55,8 @@ TestReaSpeechUI = {}
 function TestReaSpeechUI:setUp()
   reaper.__test_setUp()
   Script = {
-    host = "localhost:9000"
+    host = "localhost:9000",
+    executable_path = nil  -- Let ReaSpeechAPI auto-detect
   }
   self.app = ReaSpeechUI.new()
 end
