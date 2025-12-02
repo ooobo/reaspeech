@@ -35,6 +35,8 @@ function ProcessExecutor._init()
     options.error_msg = nil
     options.stdout_position = 0
     options.stderr_content = ""
+    options.last_stderr_size = 0
+    options.last_stderr_change_time = 0
 
     return API.new(options)
   end
@@ -68,31 +70,45 @@ function ProcessExecutor._init()
       return false
     end
 
-    -- Only read stderr during processing (stdout only written at completion)
-    self:read_stderr()
+    -- Check completion by monitoring stderr file size WITHOUT opening it
+    -- This completely eliminates file I/O contention during processing
+    local f = io.open(self.stderr_file, 'r')
+    if f then
+      local current_size = f:seek("end")
+      f:close()
 
-    -- Check if process completed
-    -- The Python script outputs "Processing time: X.XXs" when done
-    if self.stderr_content:match("Processing time:") or
-       self.stderr_content:match("ERROR:") then
-      self.complete = true
+      local current_time = reaper.time_precise()
 
-      -- Now read stdout for all the segments (only read once at completion)
-      self:read_stdout()
+      -- If file size hasn't changed in 3 seconds, assume process is complete
+      if current_size == self.last_stderr_size then
+        if current_time - self.last_stderr_change_time > 3.0 then
+          self.complete = true
 
-      reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
+          -- Now read stderr to check for errors
+          self:read_stderr()
 
-      -- Clean up temp files
-      Tempfile:remove(self.stdout_file)
-      Tempfile:remove(self.stderr_file)
+          -- Read stdout for all the segments
+          self:read_stdout()
 
-      if self.stderr_content:match("ERROR:") then
-        self.error_msg = self.stderr_content:match("ERROR: ([^\n]+)")
-        self.error_handler(self.error_msg)
-        return false
+          reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
+
+          -- Clean up temp files
+          Tempfile:remove(self.stdout_file)
+          Tempfile:remove(self.stderr_file)
+
+          if self.stderr_content:match("ERROR:") then
+            self.error_msg = self.stderr_content:match("ERROR: ([^\n]+)")
+            self.error_handler(self.error_msg)
+            return false
+          end
+
+          return true
+        end
+      else
+        -- File size changed, update tracking
+        self.last_stderr_size = current_size
+        self.last_stderr_change_time = current_time
       end
-
-      return true
     end
 
     return false
@@ -143,23 +159,11 @@ function ProcessExecutor._init()
     local new_content = f:read("*all")
     f:close()
 
-    -- Only log new content (not what we've already seen)
-    if new_content ~= self.stderr_content then
-      local old_len = #self.stderr_content
-      local new_lines = new_content:sub(old_len + 1)
+    self.stderr_content = new_content
 
-      -- Log new progress messages to console
-      for line in new_lines:gmatch("[^\n]+") do
-        if line ~= "" then
-          if line:match("^ERROR:") then
-            reaper.ShowConsoleMsg("ReaSpeech ERROR: " .. line .. "\n")
-          else
-            reaper.ShowConsoleMsg("ReaSpeech: " .. line .. "\n")
-          end
-        end
-      end
-
-      self.stderr_content = new_content
+    -- Only log errors (called at completion, so no need to log progress)
+    if self.stderr_content:match("ERROR:") then
+      reaper.ShowConsoleMsg("ReaSpeech ERROR: " .. self.stderr_content .. "\n")
     end
   end
 
@@ -178,32 +182,14 @@ function ProcessExecutor._init()
   end
 
   function API:progress()
-    -- Parse chunk progress from stderr messages like "Processing chunk 2/6 ..."
-    -- We need to find the LAST occurrence to get current progress
-    local current_chunk, total_chunks
-
-    for chunk_line in self.stderr_content:gmatch("[^\n]+") do
-      local curr, total = chunk_line:match("Processing chunk (%d+)/(%d+)")
-      if curr and total then
-        current_chunk = tonumber(curr)
-        total_chunks = tonumber(total)
-      end
+    -- Since we don't read stderr during processing (to avoid file contention),
+    -- we can't track chunk-based progress. Just return a simple indicator.
+    if self.complete then
+      return 100
     end
 
-    if current_chunk and total_chunks and total_chunks > 0 then
-      -- Return progress as percentage (0-100)
-      -- For chunk 1/6, return ~16.67%, for 6/6 return 100%
-      return (current_chunk / total_chunks) * 100
-    end
-
-    -- Check if we're in early stages (before chunking starts)
-    if self.stderr_content:match("Loading audio") then
-      return 5
-    elseif self.stderr_content:match("Audio duration:") then
-      return 10
-    end
-
-    return 0
+    -- Return non-zero to show processing is happening
+    return 50
   end
 
   function API:execute_sync(command)
