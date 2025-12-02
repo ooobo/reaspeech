@@ -6,6 +6,7 @@
 
 WhisperModels = {
   MODELS = {
+    { name = 'nemo-parakeet-tdt-0.6b-v2', label = 'Parakeet TDT 0.6B (Fast, Recommended)', engine = 'parakeet' },
     { name = 'tiny', label = 'Tiny' },
     { name = 'tiny.en', label = 'Tiny', lang = 'en' },
     { name = 'base', label = 'Base' },

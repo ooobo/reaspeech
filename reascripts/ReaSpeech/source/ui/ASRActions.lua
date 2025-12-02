@@ -137,6 +137,10 @@ function ASRActions.make_job(media_item, take)
   local path = ReaUtil.get_source_path(take)
 
   if path then
+    -- Log warning about audio format requirements
+    reaper.ShowConsoleMsg("ReaSpeech: Using audio file: " .. path .. "\n")
+    reaper.ShowConsoleMsg("ReaSpeech: NOTE: Parakeet expects 16kHz mono WAV files. If transcription fails, convert your audio first.\n")
+
     return {item = media_item, take = take, path = path}
   else
     return nil

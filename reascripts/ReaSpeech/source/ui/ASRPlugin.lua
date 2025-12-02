@@ -27,26 +27,19 @@ end
 function ASRPlugin:asr(jobs)
   local controls_data = self._controls:get_request_data()
 
-  local data = {
-    task = controls_data.translate and 'translate' or 'transcribe',
-    output = 'json',
-    use_async = 'true',
-    vad_filter = controls_data.vad_filter and 'true' or 'false',
-    word_timestamps = 'true',
-    model_name = controls_data.model_name,
+  -- Build options for local executable
+  local options = {
+    model = controls_data.model_name,
+    word_timestamps = true,
   }
 
   if controls_data.language and controls_data.language ~= '' then
-    data.language = controls_data.language
+    options.language = controls_data.language
   end
 
-  if controls_data.hotwords and controls_data.hotwords ~= '' then
-    data.hotwords = controls_data.hotwords
-  end
-
-  if controls_data.initial_prompt and controls_data.initial_prompt ~= '' then
-    data.initial_prompt = controls_data.initial_prompt
-  end
+  -- Note: Some options like vad_filter, hotwords, initial_prompt, and translate
+  -- are not yet supported in the local executable backend
+  -- These may be added in future versions of parakeet_transcribe.py
 
   -- consolidate jobs by path, retaining a collection of
   -- { item: MediaItem, take: MediaItem_Take } objects
@@ -70,12 +63,9 @@ function ASRPlugin:asr(jobs)
   end
 
   local request = {
-    data = data,
-    file_uploads = {
-      audio_file = function(job) return job.path end
-    },
+    request_type = 'transcribe',
+    options = options,
     jobs = consolidated_jobs,
-    endpoint = self.ENDPOINT,
     callback = self:handle_response(#consolidated_jobs)
   }
 

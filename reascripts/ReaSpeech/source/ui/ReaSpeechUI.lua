@@ -36,7 +36,7 @@ function ReaSpeechUI:init()
   self.requests = {}
   self.responses = {}
 
-  ReaSpeechAPI:init(Script.host, Script.protocol)
+  ReaSpeechAPI:init(Script.executable_path)
 
   self.worker = ReaSpeechWorker.new({
     requests = self.requests,
@@ -126,7 +126,11 @@ function ReaSpeechUI:load_transcript(transcript)
 end
 
 function ReaSpeechUI:submit_request(request)
-  assert(request.endpoint, "Endpoint required for API call")
+  -- Local executable backend doesn't use endpoints
+  -- endpoint field is optional now
   request.callback = request.callback or function() end
+
+  reaper.ShowConsoleMsg("ReaSpeech: Submitting request with " .. #request.jobs .. " job(s)\n")
+
   table.insert(self.requests, request)
 end

@@ -44,7 +44,7 @@ function ASRControls:init()
     translate = storage:boolean('translate', false),
     hotwords = storage:string('hotwords', ''),
     initial_prompt = storage:string('initial_prompt', ''),
-    model_name = storage:string('model_name', self.DEFAULT_MODEL_NAME),
+    model_name = storage:string('model_name', 'nemo-parakeet-tdt-0.6b-v2'),
     vad_filter = storage:boolean('vad_filter', true),
   }
 
@@ -102,46 +102,23 @@ function ASRControls:init_model_name()
 end
 
 function ASRControls:init_asr_info()
-  self.asr_engine = nil
-  self.asr_options = {}
-
-  local request = CurlRequest().async {
-    url = ReaSpeechAPI:get_api_url('asr_info'),
-    method = 'GET',
+  -- For local executable backend, set defaults directly
+  -- No need for HTTP request to get engine info
+  self.asr_engine = 'parakeet'
+  self.asr_options = {
+    language = false,  -- Parakeet currently doesn't support language selection
+    word_timestamps = true,
+    -- Note: These options are not yet supported in local executable
+    -- vad_filter = false,
+    -- hotwords = false,
+    -- initial_prompt = false,
   }
-
-  self.asr_info_request = request:execute()
 end
 
 function ASRControls:check_asr_info()
-  if self.asr_engine or not self.asr_info_request then return end
-
-  if self.asr_info_request:error() then
-    self.alert_popup.onclose = function()
-      self:init_asr_info()
-      self.alert_popup.onclose = nil
-    end
-
-    self.alert_popup:show('Whoops!', self.asr_info_request:error())
-    self.asr_info_request = nil
-    return
-  end
-
-  if self.asr_info_request:ready() then
-    local asr_info = self.asr_info_request:result()
-    self:debug(dump(asr_info))
-
-    self.asr_engine = asr_info and asr_info.engine
-
-    if asr_info and asr_info.options then
-      for _, option in pairs(asr_info.options) do
-        self.asr_options[option] = true
-      end
-    end
-
-    self:init_model_name()
-    self:init_advanced_layout()
-  end
+  -- Local executable backend knows its capabilities immediately
+  -- No async check needed
+  return
 end
 
 function ASRControls:init_layouts()

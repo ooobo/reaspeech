@@ -2,6 +2,8 @@
 
   ReaSpeechWorker.lua - Speech transcription worker
 
+  Modified to use local executable instead of HTTP/Docker backend
+
 ]]--
 
 ReaSpeechWorker = Polo {}
@@ -34,7 +36,7 @@ function ReaSpeechWorker:interval_functions()
 
   self._interval_functions = {
     IntervalFunction().new(0.3, function () self:react_handle_request() end),
-    IntervalFunction().new(0.5, function () self:react_handle_jobs() end),
+    IntervalFunction().new(1.0, function () self:react_handle_jobs() end),  -- Check job status every second
   }
 
   return self._interval_functions
@@ -79,14 +81,12 @@ function ReaSpeechWorker:progress()
   -- then we can use that fraction
   if self.active_job then
     local active_job = self.active_job
-    if active_job.initial_request and not active_job.initial_request:ready() then
-      initial_request_progress = active_job.initial_request:progress()
-      if initial_request_progress then
-        active_job_progress = initial_request_progress / 100
+    if active_job.process and not active_job.process:ready() then
+      local process_progress = active_job.process:progress()
+      if process_progress then
+        -- Normalize progress to 0-1 range (rough estimate)
+        active_job_progress = math.min(process_progress / 100, 1.0)
       end
-    elseif active_job.job and active_job.job.progress then
-      local progress = active_job.job.progress
-      active_job_progress = (progress.current / progress.total)
     end
 
     pending_job_count = pending_job_count + 1
@@ -99,54 +99,32 @@ end
 function ReaSpeechWorker:status()
   if self.active_job then
     local active_job = self.active_job
-    if active_job.initial_request and not active_job.initial_request:ready() then
-      return 'Sending Media'
-    elseif active_job.job then
-      return self:format_job_status(active_job.job.job_status)
+    if active_job.process and not active_job.process:ready() then
+      return 'Processing'
     end
   end
 end
 
 function ReaSpeechWorker:cancel()
   if self.active_job then
-    if self.active_job.job and self.active_job.job.job_id then
-      self:cancel_job(self.active_job.job.job_id)
-    end
+    -- Note: We don't have a way to kill the process yet
+    -- Could be added to ProcessExecutor in the future
     self.active_job = nil
   end
   self.pending_jobs = {}
   self.job_count = 0
 end
 
-function ReaSpeechWorker:cancel_job(job_id)
-  local url_path = "jobs/" .. job_id
-  ReaSpeechAPI:fetch_json(url_path, 'DELETE', function(error_message)
-    self:handle_error(self.active_job, error_message)
-  end)
-end
-
-function ReaSpeechWorker:format_job_status(job_status)
-  if not job_status then return nil end
-  local s = job_status:lower():gsub("_", " ")
-  return s:gsub("(%w)(%w*)", function(first, rest)
-    return first:upper() .. rest
-  end)
-end
-
-function ReaSpeechWorker:get_job_status(job_id)
-  local url_path = "jobs/" .. job_id
-  return ReaSpeechAPI:fetch_json(url_path, 'GET', function(error_message)
-    self:handle_error(self.active_job, error_message)
-    self.active_job = nil
-  end)
-end
-
 function ReaSpeechWorker:handle_request(request)
   self:log('Processing speech...')
   self.job_count = #request.jobs
 
+  reaper.ShowConsoleMsg("ReaSpeech: Processing " .. self.job_count .. " job(s)\n")
+  reaper.ShowConsoleMsg("ReaSpeech: Request type: " .. (request.request_type or "transcribe") .. "\n")
+
   for _, job in ipairs(self:expand_jobs_from_request(request)) do
     table.insert(self.pending_jobs, job)
+    reaper.ShowConsoleMsg("ReaSpeech: Queued job for: " .. (job.audio_file or "unknown") .. "\n")
   end
 end
 
@@ -156,108 +134,50 @@ function ReaSpeechWorker:expand_jobs_from_request(request)
   for _, job in pairs(request.jobs) do
     if not seen_path[job.path] then
       seen_path[job.path] = true
-      local uploads = {}
-      if request.file_uploads then
-        for key, path_or_path_function in pairs(request.file_uploads) do
-          if type(path_or_path_function) == 'function' then
-            uploads[key] = path_or_path_function(job)
-          else
-            uploads[key] = path_or_path_function
-          end
-        end
-      end
       table.insert(jobs, {
         job = job,
-        endpoint = request.endpoint,
-        data = request.data,
-        file_uploads = uploads,
+        audio_file = job.path,
+        options = request.options or {},
+        request_type = request.request_type or 'transcribe',
         callback = request.callback
       })
     end
   end
 
-  if #jobs > 0 then
-    return jobs
-  end
-
-  local is_empty = true
-  for _, _ in pairs(request.file_uploads) do
-    is_empty = false
-  end
-
-  if not is_empty then
-    table.insert(jobs, {
-      job = { path = nil },
-      endpoint = request.endpoint,
-      data = request.data,
-      file_uploads = request.file_uploads,
-      callback = request.callback
-    })
-    return jobs
-  end
+  return jobs
 end
 
 -- May return true if the job has completed and should no longer be active
-function ReaSpeechWorker:handle_job_status(active_job, response)
-  self:debug('Active job: ' .. dump(active_job))
-  self:debug('Status: ' .. dump(response))
+function ReaSpeechWorker:handle_job_completion(active_job)
+  self:debug('Job completed: ' .. dump(active_job))
 
-  if response.error then
-    table.insert(self.responses, { error = response.error })
-    return true
-  end
+  local result = active_job.process:result()
 
-  if response.result then
-    self:handle_response(active_job, response.result)
+  if result then
+    self:handle_response(active_job, result)
     self.active_job = nil
-    return false
-  end
-
-  active_job.job.job_id = response.job_id
-  active_job.job.job_status = response.job_status
-
-  if not response.job_status then
-    return false
-  end
-
-  if response.job_status == 'SUCCESS' then
-    local job_result = response.job_result
-    if job_result.result then
-      self:handle_response(active_job, job_result.result)
-      self.active_job = nil
-      return false
-    end
-
-    response._job = active_job.job
-
-    if response.job_result.url_path then
-      table.insert(active_job.requests, ReaSpeechAPI:fetch_large(response.job_result.url_path))
-    elseif response.job_result.url_paths then
-      for _, url_path in pairs(response.job_result.url_paths) do
-        table.insert(active_job.requests, function()
-           return ReaSpeechAPI:fetch_large(url_path)
-        end)
-      end
-    end
-
-    -- Job completion depends on non-blocking download of transcript
-    return false
-  elseif response.job_status == 'FAILURE' then
-    self:handle_error(active_job, response.job_result.error)
     return true
-  end
-
-  if response.job_result and response.job_result.progress then
-    active_job.job.progress = response.job_result.progress
   end
 
   return false
 end
 
 function ReaSpeechWorker:handle_response(active_job, response)
-  response._job = active_job.job
-  response.callback = active_job.callback
-  table.insert(self.responses, response)
+  local request_type = active_job.request_type or 'transcribe'
+
+  if request_type == 'detect_language' then
+    -- For detect_language, response is already in the correct format
+    response._job = active_job.job
+    response.callback = active_job.callback
+    table.insert(self.responses, response)
+  else
+    -- For transcribe, wrap response in array to match expected format from HTTP API
+    -- The UI expects response[1].segments
+    local wrapped_response = { response }
+    wrapped_response._job = active_job.job
+    wrapped_response.callback = active_job.callback
+    table.insert(self.responses, wrapped_response)
+  end
 end
 
 function ReaSpeechWorker:handle_error(_active_job, error_message)
@@ -270,9 +190,25 @@ function ReaSpeechWorker:start_active_job()
   end
 
   local active_job = self.active_job
-  active_job.requests = {}
-  active_job.initial_request = ReaSpeechAPI:post_request(
-    active_job.endpoint, active_job.data, active_job.file_uploads)
+  local request_type = active_job.request_type or 'transcribe'
+
+  reaper.ShowConsoleMsg("ReaSpeech: Starting job - " .. request_type .. "\n")
+  reaper.ShowConsoleMsg("ReaSpeech: Audio file: " .. (active_job.audio_file or "unknown") .. "\n")
+  reaper.ShowConsoleMsg("ReaSpeech: Model: " .. (active_job.options.model or "default") .. "\n")
+
+  -- Start process based on request type
+  if request_type == 'detect_language' then
+    active_job.process = ReaSpeechAPI:detect_language(
+      active_job.audio_file,
+      active_job.options
+    )
+  else
+    -- Default to transcription
+    active_job.process = ReaSpeechAPI:transcribe(
+      active_job.audio_file,
+      active_job.options
+    )
+  end
 end
 
 function ReaSpeechWorker:check_active_job()
@@ -280,66 +216,15 @@ function ReaSpeechWorker:check_active_job()
 
   local active_job = self.active_job
 
-  if active_job.initial_request then
-    self:check_active_job_request_status()
-  end
+  if not active_job.process then return end
 
-  if #active_job.requests > 0 then
-    for key, request in pairs(active_job.requests) do
-      if type(request) ~= 'function' then
-        if not request:ready() then return end
-      else
-        active_job.requests[key] = request()
-        return
-      end
-    end
-    self:handle_responses()
-  end
-
-  self:check_active_job_status()
-end
-
-function ReaSpeechWorker:check_active_job_status()
-  if not self.active_job then return end
-
-  local active_job = self.active_job
-  if not active_job.job.job_id then return end
-
-  local response = self:get_job_status(active_job.job.job_id)
-  if response then
-    if self:handle_job_status(active_job, response) then
-      self.active_job = nil
-    end
-  end
-end
-
-function ReaSpeechWorker:check_active_job_request_status()
-  local active_job = self.active_job
-  local request = active_job.initial_request
-
-  if request:ready() then
-    if self:handle_job_status(active_job, request:result()) then
-      self.active_job = nil
-    end
-  elseif request:error() then
-    self:handle_error(active_job, request:error())
+  -- Check if process is ready
+  if active_job.process:ready() then
+    reaper.ShowConsoleMsg("ReaSpeech: Job completed!\n")
+    self:handle_job_completion(active_job)
+  elseif active_job.process:error() then
+    reaper.ShowConsoleMsg("ReaSpeech: Job failed with error: " .. active_job.process:error() .. "\n")
+    self:handle_error(active_job, active_job.process:error())
     self.active_job = nil
   end
-end
-
-function ReaSpeechWorker:handle_responses()
-  local active_job = self.active_job
-  active_job.responses = {}
-  for _, request in pairs(active_job.requests) do
-    if request:ready() then
-      table.insert(active_job.responses, request:result())
-    elseif request:error() then
-      self:handle_error(active_job, request:error())
-      self.active_job = nil
-      return
-    end
-  end
-
-  self:handle_response(active_job, active_job.responses)
-  self.active_job = nil
 end

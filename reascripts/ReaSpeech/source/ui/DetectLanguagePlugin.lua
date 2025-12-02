@@ -17,12 +17,9 @@ end
 
 function DetectLanguagePlugin:detect_language(jobs)
   local request = {
-    data = {},
-    file_uploads = {
-      audio_file = function(job) return job.path end
-    },
+    request_type = 'detect_language',
+    options = {},
     jobs = jobs,
-    endpoint = self.ENDPOINT,
     callback = self:handle_response()
   }
 
@@ -38,7 +35,8 @@ function DetectLanguagePlugin:handle_response()
     local job = response._job
     local track = reaper.GetMediaItemTake_Track(job.take)
     local guid = reaper.GetTrackGUID(track)
-    local language_code = response.language_code
+    -- Note: Python script returns 'language' not 'language_code'
+    local language_code = response.language
 
     if not seen[guid] then
       seen[guid] = {}
