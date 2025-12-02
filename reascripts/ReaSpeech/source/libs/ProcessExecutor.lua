@@ -35,8 +35,6 @@ function ProcessExecutor._init()
     options.error_msg = nil
     options.stdout_position = 0
     options.stderr_content = ""
-    options.last_stderr_size = 0
-    options.last_stderr_change_time = 0
 
     return API.new(options)
   end
@@ -70,44 +68,37 @@ function ProcessExecutor._init()
       return false
     end
 
-    -- Check completion by monitoring stderr file size WITHOUT opening it
-    -- This completely eliminates file I/O contention during processing
-    local f = io.open(self.stderr_file, 'r')
-    if f then
-      local current_size = f:seek("end")
-      f:close()
+    -- Check if stdout has any content
+    -- Python only writes to stdout when completely done, so any content = complete
+    -- This avoids reading stderr which causes file locking contention
+    local stdout_f = io.open(self.stdout_file, 'r')
+    if stdout_f then
+      local stdout_size = stdout_f:seek("end")
+      stdout_f:close()
 
-      local current_time = reaper.time_precise()
+      if stdout_size > 0 then
+        -- Process complete! Now read the results
+        self.complete = true
 
-      -- If file size hasn't changed in 3 seconds, assume process is complete
-      if current_size == self.last_stderr_size then
-        if current_time - self.last_stderr_change_time > 3.0 then
-          self.complete = true
+        -- Read stderr to check for errors
+        self:read_stderr()
 
-          -- Now read stderr to check for errors
-          self:read_stderr()
+        -- Read stdout for all the segments
+        self:read_stdout()
 
-          -- Read stdout for all the segments
-          self:read_stdout()
+        reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
 
-          reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
+        -- Clean up temp files
+        Tempfile:remove(self.stdout_file)
+        Tempfile:remove(self.stderr_file)
 
-          -- Clean up temp files
-          Tempfile:remove(self.stdout_file)
-          Tempfile:remove(self.stderr_file)
-
-          if self.stderr_content:match("ERROR:") then
-            self.error_msg = self.stderr_content:match("ERROR: ([^\n]+)")
-            self.error_handler(self.error_msg)
-            return false
-          end
-
-          return true
+        if self.stderr_content:match("ERROR:") then
+          self.error_msg = self.stderr_content:match("ERROR: ([^\n]+)")
+          self.error_handler(self.error_msg)
+          return false
         end
-      else
-        -- File size changed, update tracking
-        self.last_stderr_size = current_size
-        self.last_stderr_change_time = current_time
+
+        return true
       end
     end
 
