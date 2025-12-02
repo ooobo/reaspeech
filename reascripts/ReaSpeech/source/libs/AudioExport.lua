@@ -8,7 +8,7 @@
 
 AudioExport = {}
 
-function AudioExport.export_take_to_wav(take, item)
+function AudioExport.export_take_to_wav(_take, item)
   -- Create temp file for exported audio
   local temp_file = Tempfile:name() .. ".wav"
 
@@ -18,9 +18,6 @@ function AudioExport.export_take_to_wav(take, item)
 
   reaper.ShowConsoleMsg("ReaSpeech: Exporting audio to " .. temp_file .. "\n")
   reaper.ShowConsoleMsg("ReaSpeech: Position: " .. item_pos .. ", Length: " .. item_len .. "\n")
-
-  -- Get project sample rate
-  local project_sr = reaper.GetSetProjectInfo(0, 'PROJECT_SRATE', 0, false)
 
   -- Render settings for 16kHz mono WAV
   -- We'll use REAPER's render API to export the specific region
@@ -53,16 +50,6 @@ function AudioExport.export_take_to_wav(take, item)
   -- Render the audio
   reaper.ShowConsoleMsg("ReaSpeech: Rendering audio at 16kHz mono...\n")
 
-  -- Use REAPER's render API
-  -- Note: This is a simplified version - may need adjustment based on REAPER API
-  local render_cfg = {
-    file = temp_file,
-    srate = 16000,
-    nch = 1,
-    startpos = item_pos,
-    endpos = item_pos + item_len,
-  }
-
   -- Actually, let's use a simpler approach with reaper.Main_OnCommand
   -- Save current project state
   reaper.PreventUIRefresh(1)
@@ -87,7 +74,7 @@ function AudioExport.export_take_to_wav(take, item)
   return temp_file
 end
 
-function AudioExport.export_take_simple(take, item)
+function AudioExport.export_take_simple(take, _item)
   -- Simple version: just return the source path for now
   -- This assumes the media is already in a compatible format
   -- TODO: Add proper resampling to 16kHz mono WAV

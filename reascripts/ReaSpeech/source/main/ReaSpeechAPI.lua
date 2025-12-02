@@ -63,8 +63,8 @@ function ReaSpeechAPI:find_executable(custom_path)
   end
 
   -- Fall back to Python script
-  local script_path = script_dir .. "python/parakeet_transcribe.py"
-  return script_path, false
+  local python_script_path = script_dir .. "python/parakeet_transcribe.py"
+  return python_script_path, false
 end
 
 function ReaSpeechAPI:get_default_executable_path()
@@ -123,7 +123,7 @@ end
 -- Detect language of an audio file
 -- Note: Parakeet doesn't support language detection yet
 -- This is a placeholder for future implementation
-function ReaSpeechAPI:detect_language(audio_file, options)
+function ReaSpeechAPI:detect_language(_audio_file, options)
   local request = ProcessExecutor().async {
     command = "echo '{\"language\": \"en\"}'",
     error_handler = options.error_handler or function(_msg) end,
