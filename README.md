@@ -52,7 +52,9 @@ build_executable.bat   # On Windows
 
 This creates a self-contained executable with all Python dependencies bundled.
 
-**Note:** FFmpeg must still be installed on the system and available in your PATH.
+**Note:** FFmpeg must still be installed on the system. You can either:
+- Install it system-wide and add to your PATH, OR
+- Place `ffmpeg.exe` (Windows) / `ffmpeg` (Linux/macOS) in the same directory as the `parakeet-transcribe` executable
 
 ## Docker Backend (Legacy)
 

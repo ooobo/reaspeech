@@ -78,66 +78,36 @@ function ASRPlugin:handle_response(job_count)
   }
 
   return function(response)
-    reaper.ShowConsoleMsg("ReaSpeech: Callback received response\n")
-    reaper.ShowConsoleMsg("ReaSpeech: response[1] exists: " .. tostring(response[1] ~= nil) .. "\n")
-
-    if response[1] then
-      reaper.ShowConsoleMsg("ReaSpeech: response[1].segments exists: " .. tostring(response[1].segments ~= nil) .. "\n")
-      if response[1].segments then
-        reaper.ShowConsoleMsg("ReaSpeech: Number of segments in response: " .. #response[1].segments .. "\n")
-      end
-    end
-
     if not response[1] or not response[1].segments then
-      reaper.ShowConsoleMsg("ReaSpeech: Early return - no segments in response!\n")
       return
     end
 
     local segments = response[1].segments
     local job = response._job
 
-    reaper.ShowConsoleMsg("ReaSpeech: Processing " .. #segments .. " segments\n")
-    reaper.ShowConsoleMsg("ReaSpeech: Job has " .. #job.project_entries .. " project entries\n")
-
-    for entry_idx, project_entry in pairs(job.project_entries) do
+    for _, project_entry in pairs(job.project_entries) do
       local item = project_entry.item
       local take = project_entry.take
 
-      reaper.ShowConsoleMsg("ReaSpeech: Processing project entry " .. entry_idx .. "\n")
-
-      for seg_idx, segment in pairs(segments) do
-        reaper.ShowConsoleMsg("ReaSpeech: Processing segment " .. seg_idx .. ": " .. (segment.text or "NO TEXT") .. "\n")
-
+      for _, segment in pairs(segments) do
         local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
-
-        reaper.ShowConsoleMsg("ReaSpeech: from_whisper returned " .. #from_whisper .. " segments\n")
 
         for _, s in pairs(from_whisper) do
           -- do we get a lot of textless segments? thinking emoji
-          local text = s:get('text')
-          reaper.ShowConsoleMsg("ReaSpeech: Segment text from get(): " .. (text or "NIL") .. "\n")
-
-          if text then
+          if s:get('text') then
             transcript:add_segment(s)
-            reaper.ShowConsoleMsg("ReaSpeech: Added segment to transcript\n")
-          else
-            reaper.ShowConsoleMsg("ReaSpeech: Skipped textless segment\n")
           end
         end
       end
     end
 
-    reaper.ShowConsoleMsg("ReaSpeech: Calling transcript:update()\n")
     transcript:update()
 
     job_count = job_count - 1
-    reaper.ShowConsoleMsg("ReaSpeech: Job count now: " .. job_count .. "\n")
 
     if job_count == 0 then
-      reaper.ShowConsoleMsg("ReaSpeech: Creating TranscriptUI plugin\n")
       local plugin = TranscriptUI.new { transcript = transcript }
       self.app.plugins:add_plugin(plugin)
-      reaper.ShowConsoleMsg("ReaSpeech: TranscriptUI plugin added\n")
     end
   end
 end
