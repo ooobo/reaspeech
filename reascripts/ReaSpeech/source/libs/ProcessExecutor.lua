@@ -109,22 +109,29 @@ function ProcessExecutor._init()
       f:seek("set", self.stdout_position)
     end
 
-    -- Read new lines and parse JSON segments
+    -- Read all new lines quickly into a table
+    -- Don't parse JSON yet - minimize time file is open to avoid blocking Python writes
+    local new_lines = {}
     for line in f:lines() do
       if line and line:match('^{') then
-        local success, segment = pcall(function()
-          return json.decode(line)
-        end)
-
-        if success and segment then
-          table.insert(self.segments, segment)
-        end
+        table.insert(new_lines, line)
       end
     end
 
-    -- Save current position
+    -- Save current position and close file immediately
     self.stdout_position = f:seek()
     f:close()
+
+    -- Now parse JSON without holding the file open (prevents blocking Python)
+    for _, line in ipairs(new_lines) do
+      local success, segment = pcall(function()
+        return json.decode(line)
+      end)
+
+      if success and segment then
+        table.insert(self.segments, segment)
+      end
+    end
   end
 
   function API:read_stderr()
