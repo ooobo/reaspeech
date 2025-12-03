@@ -186,6 +186,8 @@ def main():
                        help='Chunk duration in seconds for long files (default: 120.0)')
     parser.add_argument('--quantization', type=str, default='int8',
                        help='Model quantization (default: int8, options: int8, None)')
+    parser.add_argument('--completion-marker', type=str, default=None,
+                       help='File to create when transcription is complete')
     args = parser.parse_args()
 
     audio_file = Path(args.audio_file)
@@ -208,6 +210,11 @@ def main():
         elapsed = time.time() - start_time
         print(f"[TIMING] Transcription completed at {time.time():.3f}", file=sys.stderr)
         print(f"[TIMING] Total processing time: {elapsed:.2f}s", file=sys.stderr)
+
+        # Write completion marker file if specified
+        if args.completion_marker:
+            with open(args.completion_marker, 'w') as f:
+                f.write('done\n')
 
     except Exception as e:
         print(f"ERROR: Transcription failed: {str(e)}", file=sys.stderr)

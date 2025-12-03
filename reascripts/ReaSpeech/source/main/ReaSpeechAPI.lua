@@ -87,9 +87,10 @@ end
 function ReaSpeechAPI:transcribe(audio_file, options)
   local model = options.model or "nemo-parakeet-tdt-0.6b-v2"
 
-  -- Create temp files for redirection
+  -- Create temp files for redirection and completion marker
   local stdout_file = Tempfile:name()
   local stderr_file = Tempfile:name()
+  local marker_file = Tempfile:name()
 
   -- Build command differently for standalone executable vs Python script
   local command_parts = {}
@@ -108,6 +109,10 @@ function ReaSpeechAPI:transcribe(audio_file, options)
     table.insert(command_parts, "--model")
     table.insert(command_parts, model)
   end
+
+  -- Add completion marker argument
+  table.insert(command_parts, "--completion-marker")
+  table.insert(command_parts, self:quote_path(marker_file))
 
   local command = table.concat(command_parts, " ")
 
@@ -143,6 +148,7 @@ function ReaSpeechAPI:transcribe(audio_file, options)
   return {
     stdout_file = stdout_file,
     stderr_file = stderr_file,
+    marker_file = marker_file,
     start_time = start_time,
     complete = false,
     error_msg = nil,
@@ -157,55 +163,53 @@ function ReaSpeechAPI:transcribe(audio_file, options)
         return false
       end
 
-      -- Check if stdout file has content
-      local f = io.open(self.stdout_file, 'r')
+      -- Check if completion marker file exists
+      local f = io.open(self.marker_file, 'r')
       if f then
-        local size = f:seek("end")
         f:close()
 
-        if size > 0 then
-          -- Process complete!
-          self.complete = true
+        -- Process complete!
+        self.complete = true
 
-          local end_time = reaper.time_precise()
-          local elapsed = end_time - self.start_time
+        local end_time = reaper.time_precise()
+        local elapsed = end_time - self.start_time
 
-          reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
-          reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Process execution time: %.2fs\n", elapsed))
+        reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
+        reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Process execution time: %.2fs\n", elapsed))
 
-          -- Read stdout file
-          f = io.open(self.stdout_file, 'r')
-          if f then
-            for line in f:lines() do
-              if line and line:match('^{') then
-                local success, segment = pcall(function()
-                  return json.decode(line)
-                end)
-                if success and segment then
-                  table.insert(self.segments, segment)
-                end
+        -- Read stdout file
+        f = io.open(self.stdout_file, 'r')
+        if f then
+          for line in f:lines() do
+            if line and line:match('^{') then
+              local success, segment = pcall(function()
+                return json.decode(line)
+              end)
+              if success and segment then
+                table.insert(self.segments, segment)
               end
             end
-            f:close()
           end
-
-          -- Check for errors in stderr
-          f = io.open(self.stderr_file, 'r')
-          if f then
-            local content = f:read("*all")
-            f:close()
-            if content:match("ERROR:") then
-              self.error_msg = content:match("ERROR: ([^\n]+)")
-              reaper.ShowConsoleMsg("ReaSpeech ERROR: " .. self.error_msg .. "\n")
-            end
-          end
-
-          -- Clean up temp files
-          Tempfile:remove(self.stdout_file)
-          Tempfile:remove(self.stderr_file)
-
-          return not self.error_msg
+          f:close()
         end
+
+        -- Check for errors in stderr
+        f = io.open(self.stderr_file, 'r')
+        if f then
+          local content = f:read("*all")
+          f:close()
+          if content:match("ERROR:") then
+            self.error_msg = content:match("ERROR: ([^\n]+)")
+            reaper.ShowConsoleMsg("ReaSpeech ERROR: " .. self.error_msg .. "\n")
+          end
+        end
+
+        -- Clean up temp files
+        Tempfile:remove(self.stdout_file)
+        Tempfile:remove(self.stderr_file)
+        Tempfile:remove(self.marker_file)
+
+        return not self.error_msg
       end
 
       return false
