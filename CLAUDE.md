@@ -20,42 +20,46 @@ Converting ReaSpeech from Docker/Flask/HTTP backend to local Python executable u
 - ✅ Removed verbose debug logging
 - ✅ Completion detection working (checks stdout file size > 0)
 
-### ⚠️ Current Issue: PERFORMANCE SLOWDOWN - NOW FIXED!
+### ⚠️ Current Issue: PERFORMANCE INVESTIGATION
 
-**Problem**: Transcription through REAPER was ~2.5x slower than running executable directly
+**Problem**: Transcription through REAPER has 1-3s overhead compared to direct execution
 
 **Measurements**:
 - Direct execution: 10min file = **49s**
-- Through REAPER (old): 10min file = **~120-150s**
-- Through REAPER (new): **EXPECTED ~49s** (needs testing)
+- Through REAPER: 10min file = **~50-52s**
 
-**Root Cause Identified**: `cmd /c` shell wrapper + file redirection overhead on Windows
-- Windows shell redirection is slow
-- `cmd /c` adds extra process overhead
-- File buffering behavior unpredictable with stdout/stderr redirection
+**Attempts to Optimize**:
+1. ❌ Direct file writes (--output-file): Added 20s overhead due to file I/O
+2. ❌ Progress file polling (every 2s): Added 20s overhead
+3. ❌ Progress file polling (every 30s): Still added overhead
+4. ✅ Reverted to stdout/stderr with shell redirection: Minimal overhead
 
-**Solution Implemented**: Direct file output instead of shell redirection
-1. ✅ Added `--output-file` and `--progress-file` arguments to Python script
-2. ✅ Python writes directly to files (no shell redirection)
-3. ✅ Eliminated `cmd /c` wrapper - executable runs directly
-4. ✅ Explicit flush control in Python for reliable completion detection
-5. ✅ Updated ProcessExecutor to use new file arguments
+**Current Solution**: Simple stdout/stderr approach
+- Python writes segments to stdout (simple print)
+- Python writes progress/errors to stderr
+- Lua uses shell redirection: `cmd /c "exe > out 2> err"`
+- Lua polls stdout file size every 1s to detect completion
+- Lua reads files ONCE when complete
+- Progress based on jobs completed (no file reading)
 
-**STATUS**: ⚠️ NEEDS TESTING - Executable must be rebuilt for changes to take effect
+**STATUS**: ✅ ACCEPTABLE - 1-3s overhead is minimal compared to 49s total time
 
 ## Architecture
 
 ### File Flow
 ```
 REAPER → ReaSpeechAPI:transcribe()
-       → ProcessExecutor:execute_async()
-       → parakeet-transcribe-windows.exe file.wav --output-file out.json --progress-file prog.txt
-       → ProcessExecutor polls output file size every 1.0s
-       → When output size > 0: read all segments at once
+       → ExecProcess directly (no ProcessExecutor wrapper)
+       → cmd /c "parakeet-transcribe-windows.exe file.wav > stdout.tmp 2> stderr.tmp"
+       → ReaSpeechWorker polls stdout file size every 1.0s
+       → When stdout size > 0: read all segments at once
        → Return to callback → Create transcript UI
 ```
 
-**Key improvement**: No more `cmd /c` wrapper or shell redirection!
+**Key simplifications**:
+- Bypassed ProcessExecutor entirely for minimal overhead
+- Python writes to stdout/stderr (no explicit file I/O)
+- Progress based on jobs completed (no file polling)
 
 ### Key Files
 
@@ -75,36 +79,38 @@ REAPER → ReaSpeechAPI:transcribe()
 ## Technical Details
 
 ### Completion Detection
-**Current approach** (in `ProcessExecutor.lua:62-105`):
-1. Every 1.0s, check output file size (seek to end, get position, close)
-2. If `output size > 0`: Process complete (Python only writes when done)
-3. Read output file once for all segments
-4. Read progress file once for error checking
+**Current approach** (in `ReaSpeechAPI.lua:ready()`):
+1. Every 1.0s (via ReaSpeechWorker), check stdout file size
+2. If `stdout size > 0`: Process complete (Python only writes at end)
+3. Read stdout once for all segments
+4. Read stderr once for error checking
 
-**Key improvements**:
-- Python writes directly to files (no shell redirection overhead)
-- Explicit flush ensures data is written immediately
-- No file locking contention with direct file I/O
+**Key optimizations**:
+- No file I/O during processing (only size check)
+- Files read ONCE when complete
+- No progress file polling
+- Progress calculated from jobs completed
 
 ### Performance Investigation Notes
 
 **What we learned**:
-- Short files (< 120s, no chunking): No slowdown (never had the problem)
-- Long files (6+ chunks): Progressive slowdown (now FIXED)
-- Root cause: `cmd /c` + shell redirection overhead on Windows
-- Solution: Direct file I/O eliminates overhead
+- Direct file writes (--output-file) added 20s overhead
+- Progress file polling (even at 30s intervals) added overhead
+- Shell redirection to stdout is faster than direct file writes
+- Minimal polling (just file size check) has negligible overhead
 
 **What we tried**:
-1. ~~Flushing stdout~~ - Made it worse (more I/O overhead with redirection)
-2. ~~File locking contention~~ - Minimized but not enough
-3. ~~Polling frequency~~ - Optimized to 1.0s but still slow
-4. ✅ **Direct file output** - Eliminates shell overhead entirely!
+1. ❌ Direct file writes with --output-file: +20s overhead
+2. ❌ Progress file polling every 2s: +20s overhead
+3. ❌ Progress file polling every 30s: Still added overhead
+4. ❌ ProcessExecutor wrapper: Suspected overhead
+5. ✅ **Simple stdout/stderr with ExecProcess**: 1-3s overhead
 
-**Performance gains expected**:
-- Eliminates `cmd /c` process creation overhead
-- Removes shell redirection overhead
-- Direct file writes with explicit flush control
-- Should match native command-line performance (~49s for 10min file)
+**Final solution**:
+- Python: Simple print() to stdout
+- Lua: Shell redirection + size check polling
+- Progress: Based on jobs completed (not file reads)
+- Result: ~50s total for 10min file (49s + 1-3s overhead)
 
 ## Building the Executable
 
