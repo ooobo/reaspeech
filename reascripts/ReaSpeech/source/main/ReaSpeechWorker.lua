@@ -119,12 +119,8 @@ function ReaSpeechWorker:handle_request(request)
   self:log('Processing speech...')
   self.job_count = #request.jobs
 
-  reaper.ShowConsoleMsg("ReaSpeech: Processing " .. self.job_count .. " job(s)\n")
-  reaper.ShowConsoleMsg("ReaSpeech: Request type: " .. (request.request_type or "transcribe") .. "\n")
-
   for _, job in ipairs(self:expand_jobs_from_request(request)) do
     table.insert(self.pending_jobs, job)
-    reaper.ShowConsoleMsg("ReaSpeech: Queued job for: " .. (job.audio_file or "unknown") .. "\n")
   end
 end
 
@@ -195,11 +191,6 @@ function ReaSpeechWorker:start_active_job()
   -- Record start time for performance measurement
   active_job.start_time = reaper.time_precise()
 
-  reaper.ShowConsoleMsg("ReaSpeech: Starting job - " .. request_type .. "\n")
-  reaper.ShowConsoleMsg("ReaSpeech: Audio file: " .. (active_job.audio_file or "unknown") .. "\n")
-  reaper.ShowConsoleMsg("ReaSpeech: Model: " .. (active_job.options.model or "default") .. "\n")
-  reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Job started at %.3f\n", active_job.start_time))
-
   -- Start process based on request type
   if request_type == 'detect_language' then
     active_job.process = ReaSpeechAPI:detect_language(
@@ -224,17 +215,8 @@ function ReaSpeechWorker:check_active_job()
 
   -- Check if process is ready
   if active_job.process:ready() then
-    -- Calculate elapsed time
-    local end_time = reaper.time_precise()
-    local elapsed = end_time - (active_job.start_time or end_time)
-
-    reaper.ShowConsoleMsg("ReaSpeech: Job completed!\n")
-    reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Job completed at %.3f\n", end_time))
-    reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Total wall-clock time: %.2fs\n", elapsed))
-
     self:handle_job_completion(active_job)
   elseif active_job.process:error() then
-    reaper.ShowConsoleMsg("ReaSpeech: Job failed with error: " .. active_job.process:error() .. "\n")
     self:handle_error(active_job, active_job.process:error())
     self.active_job = nil
   end

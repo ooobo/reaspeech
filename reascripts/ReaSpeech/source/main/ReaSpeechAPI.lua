@@ -124,25 +124,18 @@ function ReaSpeechAPI:transcribe(audio_file, options)
     cmd_with_redirect = command .. ' > "' .. stdout_file .. '" 2> "' .. stderr_file .. '"'
   end
 
-  -- Log the command being executed
-  reaper.ShowConsoleMsg("ReaSpeech: Executing command: " .. cmd_with_redirect .. "\n")
-
   -- Record start time
   local start_time = reaper.time_precise()
-  reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Process started at %.3f\n", start_time))
 
   -- Start background process
   local result = ExecProcess.new(cmd_with_redirect):background()
 
   if not result then
-    reaper.ShowConsoleMsg("ReaSpeech ERROR: Unable to start background process\n")
     if options.error_handler then
       options.error_handler("Unable to start background process")
     end
     return nil
   end
-
-  reaper.ShowConsoleMsg("ReaSpeech: Background process started successfully\n")
 
   -- Return a simple process object
   return {
@@ -174,8 +167,7 @@ function ReaSpeechAPI:transcribe(audio_file, options)
         local end_time = reaper.time_precise()
         local elapsed = end_time - self.start_time
 
-        reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
-        reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Process execution time: %.2fs\n", elapsed))
+        reaper.ShowConsoleMsg(string.format("[TIMING] Lua wall-clock time: %.2fs\n", elapsed))
 
         -- Read stdout file
         f = io.open(self.stdout_file, 'r')

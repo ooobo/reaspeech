@@ -111,11 +111,9 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
     """
 
     # Load entire audio file with ffmpeg (supports all formats)
-    print(f"Loading audio file: {audio_path}", file=sys.stderr)
     audio = load_audio_with_ffmpeg(audio_path, sr=SAMPLE_RATE)
 
     duration = len(audio) / SAMPLE_RATE
-    print(f"Audio duration: {duration:.1f}s", file=sys.stderr)
 
     if duration <= chunk_duration:
         # Short file - process in one go
@@ -127,8 +125,6 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
             return [{'text': text, 'start': 0.0, 'end': duration}]
 
     # Long file - process in chunks
-    print(f"Processing {duration:.1f}s audio in chunks of {chunk_duration}s...", file=sys.stderr)
-
     all_tokens = []
     all_timestamps = []
 
@@ -147,7 +143,6 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
         chunk_start = start / SAMPLE_RATE
         chunk_end = end / SAMPLE_RATE
 
-        print(f"Processing chunk {chunk_idx+1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)...", file=sys.stderr)
         result = asr.recognize(chunk, sample_rate=SAMPLE_RATE)
 
         if hasattr(result, 'tokens') and hasattr(result, 'timestamps'):
@@ -196,7 +191,6 @@ def main():
         sys.exit(1)
 
     try:
-        print(f"[TIMING] Transcription started at {time.time():.3f}", file=sys.stderr)
         start_time = time.time()
 
         quantization = None if args.quantization.lower() == 'none' else args.quantization
@@ -207,9 +201,11 @@ def main():
         for segment in sentences:
             print(json.dumps(segment))
 
+        # Ensure all stdout is flushed before writing marker
+        sys.stdout.flush()
+
         elapsed = time.time() - start_time
-        print(f"[TIMING] Transcription completed at {time.time():.3f}", file=sys.stderr)
-        print(f"[TIMING] Total processing time: {elapsed:.2f}s", file=sys.stderr)
+        print(f"[TIMING] Python processing time: {elapsed:.2f}s", file=sys.stderr)
 
         # Write completion marker file if specified
         if args.completion_marker:
