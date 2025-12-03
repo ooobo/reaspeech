@@ -137,6 +137,10 @@ function ReaSpeechAPI:transcribe(audio_file, options)
     return nil
   end
 
+  -- Create a logger instance for timing
+  local logger = Logging()
+  logger:init({}, "ReaSpeechAPI")
+
   -- Return a simple process object
   return {
     stdout_file = stdout_file,
@@ -146,6 +150,7 @@ function ReaSpeechAPI:transcribe(audio_file, options)
     complete = false,
     error_msg = nil,
     segments = {},
+    logger = logger,
 
     ready = function(self)
       if self.complete then
@@ -167,7 +172,7 @@ function ReaSpeechAPI:transcribe(audio_file, options)
         local end_time = reaper.time_precise()
         local elapsed = end_time - self.start_time
 
-        reaper.ShowConsoleMsg(string.format("[TIMING] Lua wall-clock time: %.2fs\n", elapsed))
+        self.logger:log(string.format("[TIMING] Lua wall-clock time: %.2fs", elapsed))
 
         -- Read stdout file
         f = io.open(self.stdout_file, 'r')
@@ -192,7 +197,7 @@ function ReaSpeechAPI:transcribe(audio_file, options)
           f:close()
           if content:match("ERROR:") then
             self.error_msg = content:match("ERROR: ([^\n]+)")
-            reaper.ShowConsoleMsg("ReaSpeech ERROR: " .. self.error_msg .. "\n")
+            self.logger:log("ERROR: " .. self.error_msg)
           end
         end
 

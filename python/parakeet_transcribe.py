@@ -6,6 +6,7 @@ Standalone executable for ASR transcription using onnx-asr
 import sys
 import os
 import time
+import logging
 
 # Handle multiprocessing spawn on macOS
 if '-c' in sys.argv:
@@ -185,9 +186,17 @@ def main():
                        help='File to create when transcription is complete')
     args = parser.parse_args()
 
+    # Setup logging to stderr
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s',
+        stream=sys.stderr
+    )
+    logger = logging.getLogger(__name__)
+
     audio_file = Path(args.audio_file)
     if not audio_file.exists():
-        print(f"ERROR: Audio file not found: {audio_file}", file=sys.stderr)
+        logger.error(f"Audio file not found: {audio_file}")
         sys.exit(1)
 
     try:
@@ -205,7 +214,7 @@ def main():
         sys.stdout.flush()
 
         elapsed = time.time() - start_time
-        print(f"[TIMING] Python processing time: {elapsed:.2f}s", file=sys.stderr)
+        logger.info(f"[TIMING] Python processing time: {elapsed:.2f}s")
 
         # Write completion marker file if specified
         if args.completion_marker:
@@ -213,7 +222,7 @@ def main():
                 f.write('done\n')
 
     except Exception as e:
-        print(f"ERROR: Transcription failed: {str(e)}", file=sys.stderr)
+        logger.error(f"Transcription failed: {str(e)}")
         import traceback
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
