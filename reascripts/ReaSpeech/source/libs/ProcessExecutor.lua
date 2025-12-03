@@ -36,6 +36,8 @@ function ProcessExecutor._init()
     options.output_position = 0
     options.progress_content = ""
     options.process_start_time = nil
+    options.last_progress_percent = nil
+    options.last_progress_read_time = 0
 
     return API.new(options)
   end
@@ -180,14 +182,41 @@ function ProcessExecutor._init()
   end
 
   function API:progress()
-    -- Since we don't read stderr during processing (to avoid file contention),
-    -- we can't track chunk-based progress. Just return a simple indicator.
     if self.complete then
       return 100
     end
 
-    -- Return non-zero to show processing is happening
-    return 50
+    -- Read progress file periodically (every 2 seconds to avoid overhead)
+    local current_time = reaper.time_precise()
+    if current_time - self.last_progress_read_time >= 2.0 then
+      self.last_progress_read_time = current_time
+
+      -- Quick read of progress file
+      local f = io.open(self.progress_file, 'r')
+      if f then
+        local content = f:read("*all")
+        f:close()
+
+        -- Find ALL chunk progress messages and use the last one
+        local last_current, last_total
+        for current, total in content:gmatch("Processing chunk (%d+)/(%d+)") do
+          last_current = current
+          last_total = total
+        end
+
+        if last_current and last_total then
+          local current_num = tonumber(last_current)
+          local total_num = tonumber(last_total)
+          if current_num and total_num and total_num > 0 then
+            -- Calculate progress as percentage (0-99, reserve 100 for complete)
+            self.last_progress_percent = math.floor((current_num / total_num) * 99)
+          end
+        end
+      end
+    end
+
+    -- Return cached progress or default
+    return self.last_progress_percent or 50
   end
 
   function API:execute_sync(command)
