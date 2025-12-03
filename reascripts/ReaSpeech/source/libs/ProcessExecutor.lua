@@ -186,9 +186,9 @@ function ProcessExecutor._init()
       return 100
     end
 
-    -- Read progress file periodically (every 2 seconds to avoid overhead)
+    -- Read progress file periodically (every 30 seconds to minimize overhead)
     local current_time = reaper.time_precise()
-    if current_time - self.last_progress_read_time >= 2.0 then
+    if current_time - self.last_progress_read_time >= 30.0 then
       self.last_progress_read_time = current_time
 
       -- Quick read of progress file
