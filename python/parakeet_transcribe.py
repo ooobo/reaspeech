@@ -95,7 +95,7 @@ def load_audio_with_ffmpeg(audio_path, sr=SAMPLE_RATE):
     return np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
 
 
-def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_duration=15.0, progress_file=None):
+def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_duration=15.0):
     """
     Transcribe audio file with chunking for long files, preserving timestamps.
     Uses ffmpeg for audio loading to support all formats (WAV, MP3, BWF, FLAC, etc.)
@@ -105,20 +105,17 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
         audio_path: Path to audio file (any format ffmpeg supports)
         chunk_duration: Duration of each chunk in seconds
         overlap_duration: Overlap between chunks in seconds
-        progress_file: File handle for progress messages (default: sys.stderr)
 
     Returns:
         List of sentence dicts with {text, start, end}
     """
-    if progress_file is None:
-        progress_file = sys.stderr
 
     # Load entire audio file with ffmpeg (supports all formats)
-    print(f"Loading audio file: {audio_path}", file=progress_file)
+    print(f"Loading audio file: {audio_path}", file=sys.stderr)
     audio = load_audio_with_ffmpeg(audio_path, sr=SAMPLE_RATE)
 
     duration = len(audio) / SAMPLE_RATE
-    print(f"Audio duration: {duration:.1f}s", file=progress_file)
+    print(f"Audio duration: {duration:.1f}s", file=sys.stderr)
 
     if duration <= chunk_duration:
         # Short file - process in one go
@@ -130,7 +127,7 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
             return [{'text': text, 'start': 0.0, 'end': duration}]
 
     # Long file - process in chunks
-    print(f"Processing {duration:.1f}s audio in chunks of {chunk_duration}s...", file=progress_file)
+    print(f"Processing {duration:.1f}s audio in chunks of {chunk_duration}s...", file=sys.stderr)
 
     all_tokens = []
     all_timestamps = []
@@ -150,8 +147,7 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
         chunk_start = start / SAMPLE_RATE
         chunk_end = end / SAMPLE_RATE
 
-        print(f"Processing chunk {chunk_idx+1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)...", file=progress_file)
-        progress_file.flush()
+        print(f"Processing chunk {chunk_idx+1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)...", file=sys.stderr)
         result = asr.recognize(chunk, sample_rate=SAMPLE_RATE)
 
         if hasattr(result, 'tokens') and hasattr(result, 'timestamps'):
@@ -190,10 +186,6 @@ def main():
                        help='Chunk duration in seconds for long files (default: 120.0)')
     parser.add_argument('--quantization', type=str, default='int8',
                        help='Model quantization (default: int8, options: int8, None)')
-    parser.add_argument('--output-file', type=str, default=None,
-                       help='Output file for segments (default: stdout)')
-    parser.add_argument('--progress-file', type=str, default=None,
-                       help='Progress file for status updates (default: stderr)')
     args = parser.parse_args()
 
     audio_file = Path(args.audio_file)
@@ -201,42 +193,27 @@ def main():
         print(f"ERROR: Audio file not found: {audio_file}", file=sys.stderr)
         sys.exit(1)
 
-    # Open output files if specified
-    output_file = open(args.output_file, 'w', encoding='utf-8') if args.output_file else sys.stdout
-    progress_file = open(args.progress_file, 'w', encoding='utf-8') if args.progress_file else sys.stderr
-
     try:
-        print(f"[TIMING] Transcription started at {time.time():.3f}", file=progress_file)
-        progress_file.flush()
+        print(f"[TIMING] Transcription started at {time.time():.3f}", file=sys.stderr)
         start_time = time.time()
 
         quantization = None if args.quantization.lower() == 'none' else args.quantization
         asr = load_model(args.model, quantization=quantization, providers=['CPUExecutionProvider']).with_timestamps()
-        sentences = transcribe_with_chunking(asr, str(audio_file), chunk_duration=args.chunk_duration, progress_file=progress_file)
+        sentences = transcribe_with_chunking(asr, str(audio_file), chunk_duration=args.chunk_duration)
 
-        # Write all segments to output file at once
+        # Write all segments to stdout
         for segment in sentences:
-            output_file.write(json.dumps(segment) + '\n')
-
-        # Ensure all data is written
-        output_file.flush()
-        if args.output_file:
-            output_file.close()
+            print(json.dumps(segment))
 
         elapsed = time.time() - start_time
-        print(f"[TIMING] Transcription completed at {time.time():.3f}", file=progress_file)
-        print(f"[TIMING] Total processing time: {elapsed:.2f}s", file=progress_file)
-        progress_file.flush()
+        print(f"[TIMING] Transcription completed at {time.time():.3f}", file=sys.stderr)
+        print(f"[TIMING] Total processing time: {elapsed:.2f}s", file=sys.stderr)
 
     except Exception as e:
-        print(f"ERROR: Transcription failed: {str(e)}", file=progress_file)
+        print(f"ERROR: Transcription failed: {str(e)}", file=sys.stderr)
         import traceback
-        traceback.print_exc(file=progress_file)
-        progress_file.flush()
+        traceback.print_exc(file=sys.stderr)
         sys.exit(1)
-    finally:
-        if args.progress_file and progress_file != sys.stderr:
-            progress_file.close()
 
 if __name__ == '__main__':
     main()

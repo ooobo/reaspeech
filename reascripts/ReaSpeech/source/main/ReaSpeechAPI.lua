@@ -87,18 +87,16 @@ end
 function ReaSpeechAPI:transcribe(audio_file, options)
   local model = options.model or "nemo-parakeet-tdt-0.6b-v2"
 
-  -- Create temp files
-  local output_file = Tempfile:name()
-  local progress_file = Tempfile:name()
+  -- Create temp files for redirection
+  local stdout_file = Tempfile:name()
+  local stderr_file = Tempfile:name()
 
   -- Build command differently for standalone executable vs Python script
   local command_parts = {}
 
   if self.is_standalone then
-    -- Standalone executable: ./parakeet-transcribe audio_file [--model MODEL]
     table.insert(command_parts, self:quote_path(self.executable_path))
   else
-    -- Python script: python parakeet_transcribe.py audio_file [--model MODEL]
     table.insert(command_parts, self.python_cmd)
     table.insert(command_parts, self:quote_path(self.executable_path))
   end
@@ -111,25 +109,25 @@ function ReaSpeechAPI:transcribe(audio_file, options)
     table.insert(command_parts, model)
   end
 
-  -- Add output file arguments
-  table.insert(command_parts, "--output-file")
-  table.insert(command_parts, self:quote_path(output_file))
-  table.insert(command_parts, "--progress-file")
-  table.insert(command_parts, self:quote_path(progress_file))
-
   local command = table.concat(command_parts, " ")
 
+  -- Add shell redirection
+  local cmd_with_redirect
+  if EnvUtil.is_windows() then
+    cmd_with_redirect = 'cmd /c "' .. command .. ' > ' .. stdout_file .. ' 2> ' .. stderr_file .. '"'
+  else
+    cmd_with_redirect = command .. ' > "' .. stdout_file .. '" 2> "' .. stderr_file .. '"'
+  end
+
   -- Log the command being executed
-  reaper.ShowConsoleMsg("ReaSpeech: Executing command: " .. command .. "\n")
-  reaper.ShowConsoleMsg("ReaSpeech: output -> " .. output_file .. "\n")
-  reaper.ShowConsoleMsg("ReaSpeech: progress -> " .. progress_file .. "\n")
+  reaper.ShowConsoleMsg("ReaSpeech: Executing command: " .. cmd_with_redirect .. "\n")
 
   -- Record start time
   local start_time = reaper.time_precise()
   reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Process started at %.3f\n", start_time))
 
-  -- Start background process using ExecProcess directly
-  local result = ExecProcess.new(command):background()
+  -- Start background process
+  local result = ExecProcess.new(cmd_with_redirect):background()
 
   if not result then
     reaper.ShowConsoleMsg("ReaSpeech ERROR: Unable to start background process\n")
@@ -143,8 +141,8 @@ function ReaSpeechAPI:transcribe(audio_file, options)
 
   -- Return a simple process object
   return {
-    output_file = output_file,
-    progress_file = progress_file,
+    stdout_file = stdout_file,
+    stderr_file = stderr_file,
     start_time = start_time,
     complete = false,
     error_msg = nil,
@@ -159,8 +157,8 @@ function ReaSpeechAPI:transcribe(audio_file, options)
         return false
       end
 
-      -- Check if output file has content
-      local f = io.open(self.output_file, 'r')
+      -- Check if stdout file has content
+      local f = io.open(self.stdout_file, 'r')
       if f then
         local size = f:seek("end")
         f:close()
@@ -175,8 +173,8 @@ function ReaSpeechAPI:transcribe(audio_file, options)
           reaper.ShowConsoleMsg("ReaSpeech: Process marked as complete\n")
           reaper.ShowConsoleMsg(string.format("ReaSpeech: [TIMING] Process execution time: %.2fs\n", elapsed))
 
-          -- Read output file
-          f = io.open(self.output_file, 'r')
+          -- Read stdout file
+          f = io.open(self.stdout_file, 'r')
           if f then
             for line in f:lines() do
               if line and line:match('^{') then
@@ -191,8 +189,8 @@ function ReaSpeechAPI:transcribe(audio_file, options)
             f:close()
           end
 
-          -- Check for errors in progress file
-          f = io.open(self.progress_file, 'r')
+          -- Check for errors in stderr
+          f = io.open(self.stderr_file, 'r')
           if f then
             local content = f:read("*all")
             f:close()
@@ -203,8 +201,8 @@ function ReaSpeechAPI:transcribe(audio_file, options)
           end
 
           -- Clean up temp files
-          Tempfile:remove(self.output_file)
-          Tempfile:remove(self.progress_file)
+          Tempfile:remove(self.stdout_file)
+          Tempfile:remove(self.stderr_file)
 
           return not self.error_msg
         end
