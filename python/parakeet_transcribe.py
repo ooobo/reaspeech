@@ -8,8 +8,8 @@ import os
 import time
 
 # Handle multiprocessing spawn on macOS
-if '-c' in sys.argv:
-    code_index = sys.argv.index('-c') + 1
+if "-c" in sys.argv:
+    code_index = sys.argv.index("-c") + 1
     if code_index < len(sys.argv):
         exec(sys.argv[code_index])
     sys.exit(0)
@@ -20,13 +20,14 @@ from pathlib import Path
 import numpy as np
 import ffmpeg
 
-os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
-os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
 from onnx_asr import load_model
 
 SAMPLE_RATE = 16000
 FFMPEG_BIN = os.getenv("FFMPEG_BIN", "ffmpeg")
+
 
 def tokens_to_sentences(tokens, timestamps):
     """
@@ -45,12 +46,12 @@ def tokens_to_sentences(tokens, timestamps):
     sentences = []
     current_tokens = []
     current_start = timestamps[0] if timestamps else 0.0
-    sentence_end_puncts = {'.', '!', '?'}
+    sentence_end_puncts = {".", "!", "?"}
 
     for i, (token, ts) in enumerate(zip(tokens, timestamps)):
         current_tokens.append(token)
         is_sentence_end = any(token.strip().endswith(p) for p in sentence_end_puncts)
-        is_last_token = (i == len(tokens) - 1)
+        is_last_token = i == len(tokens) - 1
 
         if is_sentence_end or is_last_token:
             if i + 1 < len(timestamps):
@@ -58,19 +59,18 @@ def tokens_to_sentences(tokens, timestamps):
             else:
                 current_end = ts + 0.16
 
-            text = ''.join(current_tokens).strip()
+            text = "".join(current_tokens).strip()
             if text:
-                sentences.append({
-                    'text': text,
-                    'start': current_start,
-                    'end': current_end
-                })
+                sentences.append(
+                    {"text": text, "start": current_start, "end": current_end}
+                )
 
             current_tokens = []
             if i + 1 < len(timestamps):
                 current_start = timestamps[i + 1]
 
     return sentences
+
 
 def load_audio_with_ffmpeg(audio_path, sr=SAMPLE_RATE):
     """
@@ -95,7 +95,9 @@ def load_audio_with_ffmpeg(audio_path, sr=SAMPLE_RATE):
     return np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
 
 
-def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_duration=15.0):
+def transcribe_with_chunking(
+    asr, audio_path, chunk_duration=120.0, overlap_duration=15.0
+):
     """
     Transcribe audio file with chunking for long files, preserving timestamps.
 
@@ -117,11 +119,11 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
     if duration <= chunk_duration:
         # Short file - process in one go
         result = asr.recognize(audio, sample_rate=SAMPLE_RATE)
-        if hasattr(result, 'tokens') and hasattr(result, 'timestamps'):
+        if hasattr(result, "tokens") and hasattr(result, "timestamps"):
             return tokens_to_sentences(result.tokens, result.timestamps)
         else:
-            text = result.text if hasattr(result, 'text') else str(result)
-            return [{'text': text, 'start': 0.0, 'end': duration}]
+            text = result.text if hasattr(result, "text") else str(result)
+            return [{"text": text, "start": 0.0, "end": duration}]
 
     # Long file - process in chunks
     all_tokens = []
@@ -142,7 +144,7 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
 
         result = asr.recognize(chunk, sample_rate=SAMPLE_RATE)
 
-        if hasattr(result, 'tokens') and hasattr(result, 'timestamps'):
+        if hasattr(result, "tokens") and hasattr(result, "timestamps"):
             adjusted_timestamps = [ts + chunk_start for ts in result.timestamps]
 
             if chunk_idx > 0 and all_timestamps:
@@ -169,17 +171,34 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
     # Convert tokens to sentences and return
     return tokens_to_sentences(all_tokens, all_timestamps)
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Transcribe audio using Parakeet TDT')
-    parser.add_argument('audio_file', type=str, help='Path to audio file')
-    parser.add_argument('--model', type=str, default='nemo-parakeet-tdt-0.6b-v2',
-                       help='Model name (default: nemo-parakeet-tdt-0.6b-v2)')
-    parser.add_argument('--chunk-duration', type=float, default=120.0,
-                       help='Chunk duration in seconds for long files (default: 120.0)')
-    parser.add_argument('--quantization', type=str, default='int8',
-                       help='Model quantization (default: int8, options: int8, None)')
-    parser.add_argument('--completion-marker', type=str, default=None,
-                       help='File to create when transcription is complete')
+    parser = argparse.ArgumentParser(description="Transcribe audio using Parakeet TDT")
+    parser.add_argument("audio_file", type=str, help="Path to audio file")
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="nemo-parakeet-tdt-0.6b-v2",
+        help="Model name (default: nemo-parakeet-tdt-0.6b-v2)",
+    )
+    parser.add_argument(
+        "--chunk-duration",
+        type=float,
+        default=120.0,
+        help="Chunk duration in seconds for long files (default: 120.0)",
+    )
+    parser.add_argument(
+        "--quantization",
+        type=str,
+        default="int8",
+        help="Model quantization (default: int8, options: int8, None)",
+    )
+    parser.add_argument(
+        "--completion-marker",
+        type=str,
+        default=None,
+        help="File to create when transcription is complete",
+    )
     args = parser.parse_args()
 
     audio_file = Path(args.audio_file)
@@ -190,9 +209,13 @@ def main():
     try:
         start_time = time.time()
 
-        quantization = None if args.quantization.lower() == 'none' else args.quantization
+        quantization = (
+            None if args.quantization.lower() == "none" else args.quantization
+        )
         asr = load_model(args.model, quantization=quantization).with_timestamps()
-        sentences = transcribe_with_chunking(asr, str(audio_file), chunk_duration=args.chunk_duration)
+        sentences = transcribe_with_chunking(
+            asr, str(audio_file), chunk_duration=args.chunk_duration
+        )
 
         # Write all segments to stdout
         for segment in sentences:
@@ -206,14 +229,16 @@ def main():
 
         # Write completion marker file if specified
         if args.completion_marker:
-            with open(args.completion_marker, 'w') as f:
-                f.write('done\n')
+            with open(args.completion_marker, "w") as f:
+                f.write("done\n")
 
     except Exception as e:
         print(f"ERROR: Transcription failed: {str(e)}", file=sys.stderr)
         import traceback
+
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
