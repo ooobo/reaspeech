@@ -233,7 +233,7 @@ function ReaSpeechAPI:transcribe(audio_file, options)
 end
 
 -- Detect language of an audio file
--- Note: Parakeet doesn't support language detection yet
+-- Note: Parakeet doesn't support language detection
 -- This is a placeholder for future implementation
 function ReaSpeechAPI:detect_language(_audio_file, options)
   local output_file = Tempfile:name()
