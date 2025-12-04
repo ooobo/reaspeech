@@ -45,3 +45,4 @@ app/output/*/
 *.sqlite
 
 /pywhispercpp
+reascripts/ReaSpeech/python/dist/*
