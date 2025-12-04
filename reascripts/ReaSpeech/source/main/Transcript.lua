@@ -35,7 +35,8 @@ end
 
 function Transcript:get_columns()
   if #self.init_data > 0 then
-    local columns = {"score"}
+    -- Include virtual columns that are computed in TranscriptSegment:get()
+    local columns = {"score", "raw-start", "raw-end"}
     local row = self.init_data[1]
     for k, _ in pairs(row.data) do
       if k:sub(1, 1) ~= '_' then

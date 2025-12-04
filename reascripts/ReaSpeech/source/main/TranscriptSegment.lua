@@ -225,13 +225,35 @@ function TranscriptSegment:navigate(word_index, autoplay)
   end
 end
 
+function TranscriptSegment:is_on_timeline()
+  local startoffs = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
+  local item_length = reaper.GetMediaItemInfo_Value(self.item, 'D_LENGTH')
+  local playrate = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_PLAYRATE')
+
+  -- Adjust item length for playrate to get source length
+  local source_length = item_length * playrate
+  local clip_end = startoffs + source_length
+
+  -- Check if segment is within the clipped portion of the file
+  -- Segment must start after or at clip start and end before or at clip end
+  return self.start >= startoffs and self.end_ <= clip_end
+end
+
 function TranscriptSegment:timeline_start_time()
+  if not self:is_on_timeline() then
+    return nil
+  end
+
   return reaper.GetMediaItemInfo_Value(self.item, 'D_POSITION')
     + self.start
     - reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
 end
 
 function TranscriptSegment:timeline_end_time()
+  if not self:is_on_timeline() then
+    return nil
+  end
+
   return reaper.GetMediaItemInfo_Value(self.item, 'D_POSITION')
     + self.end_
     - reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')

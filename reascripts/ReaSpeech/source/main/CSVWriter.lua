@@ -74,8 +74,8 @@ end
 function CSVWriter:write_line(line, sequence_number, timeline_start, timeline_end, raw_start, raw_end, file)
   local fields = {
     sequence_number,
-    CSVWriter._quoted(CSVWriter.format_time(timeline_start)),
-    CSVWriter._quoted(CSVWriter.format_time(timeline_end)),
+    CSVWriter._quoted(timeline_start and CSVWriter.format_time(timeline_start) or '-'),
+    CSVWriter._quoted(timeline_end and CSVWriter.format_time(timeline_end) or '-'),
     CSVWriter._quoted(CSVWriter.format_time(raw_start)),
     CSVWriter._quoted(CSVWriter.format_time(raw_end)),
     CSVWriter._quoted(line),

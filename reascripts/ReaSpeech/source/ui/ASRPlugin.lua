@@ -114,9 +114,6 @@ end
 ASRPlugin.new_transcript_name = function()
   local time = os.time()
   -- Remove invalid filename characters (,  :, @) for Windows compatibility
-  local date_start = os.date('%b %d %Y - %I-%M', time)
-  ---@diagnostic disable-next-line: param-type-mismatch
-  local am_pm = string.lower(os.date('%p', time))
-
-  return date_start .. am_pm
+  -- Use 24-hour format: "Dec 05 2025 - 1359"
+  return os.date('%b %d %Y - %H%M', time)
 end

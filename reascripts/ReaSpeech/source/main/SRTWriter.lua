@@ -38,16 +38,25 @@ end
 function SRTWriter:write(transcript)
   local sequence_number = 1
   for _, segment in pairs(transcript:get_segments()) do
-    self:write_segment(segment, sequence_number)
-    sequence_number = sequence_number + 1
+    -- Only increment sequence number if segment was written
+    if self:write_segment(segment, sequence_number) then
+      sequence_number = sequence_number + 1
+    end
   end
 end
 
 function SRTWriter:write_segment(segment, sequence_number)
   local start = segment:timeline_start_time()
   local end_ = segment:timeline_end_time()
+
+  -- Skip segments that aren't on the timeline
+  if not start or not end_ then
+    return false
+  end
+
   local text = segment:get('text')
   self:write_line(text, sequence_number, start, end_)
+  return true
 end
 
 function SRTWriter:write_line(line, sequence_number, start, end_)
