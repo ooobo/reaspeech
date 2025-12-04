@@ -6,9 +6,9 @@
 
 WhisperModels = {
   MODELS = {
-    { name = 'nemo-parakeet-tdt-0.6b-v2', label = 'Parakeet TDT', engine = 'parakeet' },
-    { name = 'nemo-parakeet-tdt-0.6b-v3', label = 'Parakeet (Euro)', engine = 'parakeet' },
-    { name = 'large-v2', label = 'Whisper Lv2 Multilingual', engine = 'parakeet' },
+    { name = 'nemo-parakeet-tdt-0.6b-v2', label = 'Parakeet TDT 0.6b v2', engine = 'parakeet' },
+    { name = 'nemo-parakeet-tdt-0.6b-v3', label = 'Parakeet TDT 0.6b v3 (Euro Languages)', engine = 'parakeet' },
+    -- { name = 'onnx-community/whisper-large-v3-ONNX', label = 'Whisper Large v3 Multilingual', engine = 'parakeet',  },
     -- Commented out docker-based models for now
     -- { name = 'tiny', label = 'Tiny' },
     -- { name = 'tiny.en', label = 'Tiny', lang = 'en' },
