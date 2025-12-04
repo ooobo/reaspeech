@@ -98,10 +98,9 @@ def load_audio_with_ffmpeg(audio_path, sr=SAMPLE_RATE):
 def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_duration=15.0):
     """
     Transcribe audio file with chunking for long files, preserving timestamps.
-    Uses ffmpeg for audio loading to support all formats (WAV, MP3, BWF, FLAC, etc.)
 
     Args:
-        asr: ASR model instance (with timestamps)
+        asr: ASR model instance (default: Parakeet TDT 0.6b v3 int8)
         audio_path: Path to audio file (any format ffmpeg supports)
         chunk_duration: Duration of each chunk in seconds
         overlap_duration: Overlap between chunks in seconds
@@ -133,7 +132,6 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
     stride = chunk_samples - overlap_samples
 
     total_samples = len(audio)
-    total_chunks = (total_samples - overlap_samples - 1) // stride + 1 if total_samples > chunk_samples else 1
 
     chunk_idx = 0
     for start in range(0, total_samples, stride):
@@ -141,7 +139,6 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
         chunk = audio[start:end]
 
         chunk_start = start / SAMPLE_RATE
-        chunk_end = end / SAMPLE_RATE
 
         result = asr.recognize(chunk, sample_rate=SAMPLE_RATE)
 
@@ -174,7 +171,7 @@ def transcribe_with_chunking(asr, audio_path, chunk_duration=120.0, overlap_dura
 
 def main():
     parser = argparse.ArgumentParser(description='Transcribe audio using Parakeet TDT')
-    parser.add_argument('audio_file', type=str, help='Path to audio file (WAV, 16kHz)')
+    parser.add_argument('audio_file', type=str, help='Path to audio file')
     parser.add_argument('--model', type=str, default='nemo-parakeet-tdt-0.6b-v2',
                        help='Model name (default: nemo-parakeet-tdt-0.6b-v2)')
     parser.add_argument('--chunk-duration', type=float, default=120.0,
@@ -194,7 +191,7 @@ def main():
         start_time = time.time()
 
         quantization = None if args.quantization.lower() == 'none' else args.quantization
-        asr = load_model(args.model, quantization=quantization, providers=['CPUExecutionProvider']).with_timestamps()
+        asr = load_model(args.model, quantization=quantization).with_timestamps()
         sentences = transcribe_with_chunking(asr, str(audio_file), chunk_duration=args.chunk_duration)
 
         # Write all segments to stdout
@@ -205,7 +202,7 @@ def main():
         sys.stdout.flush()
 
         elapsed = time.time() - start_time
-        print(f"[TIMING] Python processing time: {elapsed:.2f}s", file=sys.stderr)
+        print(f"Python processing time: {elapsed:.2f}s", file=sys.stderr)
 
         # Write completion marker file if specified
         if args.completion_marker:

@@ -19,7 +19,7 @@ if errorlevel 1 (
 
 REM Install dependencies
 echo Installing Python dependencies...
-pip install onnx-asr onnxruntime huggingface-hub soundfile numpy
+pip install onnx-asr onnxruntime huggingface-hub numpy
 
 REM Build executable
 echo Running PyInstaller...
