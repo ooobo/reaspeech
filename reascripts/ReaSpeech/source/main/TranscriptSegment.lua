@@ -162,6 +162,12 @@ end
 function TranscriptSegment:get(column, default)
   if column == 'score' then
     return self:score()
+  elseif column == 'start' then
+    -- Return timeline start time for consistency with UI display and sorting
+    return self:timeline_start_time()
+  elseif column == 'end' then
+    -- Return timeline end time for consistency with UI display and sorting
+    return self:timeline_end_time()
   elseif column == 'raw-start' then
     return self.data['start']
   elseif column == 'raw-end' then
@@ -210,6 +216,11 @@ function TranscriptSegment:get_file_with_extension()
 end
 
 function TranscriptSegment:navigate(word_index, autoplay)
+  -- Don't navigate if segment is not on timeline
+  if not self:is_on_timeline() then
+    return
+  end
+
   local start = self.start
   if word_index then
     start = self.words[word_index].start

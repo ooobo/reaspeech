@@ -528,24 +528,14 @@ function TranscriptUI:render_table_cell(segment, column)
     self:render_text(segment, column)
   elseif column == "score" then
     self:render_score(segment:get(column, 0.0))
-  elseif column == 'start' then
-    local timeline_start = segment:timeline_start_time()
-    if timeline_start then
-      ImGui.Text(Ctx(), reaper.format_timestr(timeline_start, ''))
+  elseif column == 'start' or column == 'end' or column == 'raw-start' or column == 'raw-end' then
+    -- Time columns: get() returns timeline times for start/end, raw times for raw-start/raw-end
+    local time_value = segment:get(column)
+    if time_value then
+      ImGui.Text(Ctx(), reaper.format_timestr(time_value, ''))
     else
       ImGui.Text(Ctx(), '-')
     end
-  elseif column == 'end' then
-    local timeline_end = segment:timeline_end_time()
-    if timeline_end then
-      ImGui.Text(Ctx(), reaper.format_timestr(timeline_end, ''))
-    else
-      ImGui.Text(Ctx(), '-')
-    end
-  elseif column == 'raw-start' then
-    ImGui.Text(Ctx(), reaper.format_timestr(segment:get('raw-start'), ''))
-  elseif column == 'raw-end' then
-    ImGui.Text(Ctx(), reaper.format_timestr(segment:get('raw-end'), ''))
   else
     local value = segment:get(column)
     if type(value) == 'table' then

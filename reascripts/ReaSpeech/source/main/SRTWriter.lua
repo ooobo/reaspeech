@@ -46,8 +46,9 @@ function SRTWriter:write(transcript)
 end
 
 function SRTWriter:write_segment(segment, sequence_number)
-  local start = segment:timeline_start_time()
-  local end_ = segment:timeline_end_time()
+  -- get('start') and get('end') now return timeline times (can be nil)
+  local start = segment:get('start')
+  local end_ = segment:get('end')
 
   -- Skip segments that aren't on the timeline
   if not start or not end_ then

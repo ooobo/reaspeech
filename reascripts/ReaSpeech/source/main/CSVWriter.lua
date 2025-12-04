@@ -62,8 +62,9 @@ function CSVWriter:write_header_row()
 end
 
 function CSVWriter:write_segment(segment, sequence_number)
-  local timeline_start = segment:timeline_start_time()
-  local timeline_end = segment:timeline_end_time()
+  -- get('start') and get('end') now return timeline times (can be nil)
+  local timeline_start = segment:get('start')
+  local timeline_end = segment:get('end')
   local raw_start = segment:get('raw-start')
   local raw_end = segment:get('raw-end')
   local text = segment:get('text')
