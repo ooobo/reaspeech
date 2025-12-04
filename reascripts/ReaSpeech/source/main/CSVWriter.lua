@@ -51,6 +51,8 @@ function CSVWriter:write_header_row()
     CSVWriter._quoted('Sequence Number'),
     CSVWriter._quoted('Start Time'),
     CSVWriter._quoted('End Time'),
+    CSVWriter._quoted('Raw Start Time'),
+    CSVWriter._quoted('Raw End Time'),
     CSVWriter._quoted('Text'),
     CSVWriter._quoted('File'),
   }
@@ -60,18 +62,22 @@ function CSVWriter:write_header_row()
 end
 
 function CSVWriter:write_segment(segment, sequence_number)
-  local start = segment:get('start')
-  local end_ = segment:get('end')
+  local timeline_start = segment:timeline_start_time()
+  local timeline_end = segment:timeline_end_time()
+  local raw_start = segment:get('raw-start')
+  local raw_end = segment:get('raw-end')
   local text = segment:get('text')
   local file = segment:get_file_with_extension()
-  self:write_line(text, sequence_number, start, end_, file)
+  self:write_line(text, sequence_number, timeline_start, timeline_end, raw_start, raw_end, file)
 end
 
-function CSVWriter:write_line(line, sequence_number, start, end_, file)
+function CSVWriter:write_line(line, sequence_number, timeline_start, timeline_end, raw_start, raw_end, file)
   local fields = {
     sequence_number,
-    CSVWriter._quoted(CSVWriter.format_time(start)),
-    CSVWriter._quoted(CSVWriter.format_time(end_)),
+    CSVWriter._quoted(CSVWriter.format_time(timeline_start)),
+    CSVWriter._quoted(CSVWriter.format_time(timeline_end)),
+    CSVWriter._quoted(CSVWriter.format_time(raw_start)),
+    CSVWriter._quoted(CSVWriter.format_time(raw_end)),
     CSVWriter._quoted(line),
     CSVWriter._quoted(file),
   }

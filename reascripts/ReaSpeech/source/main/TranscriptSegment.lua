@@ -162,6 +162,10 @@ end
 function TranscriptSegment:get(column, default)
   if column == 'score' then
     return self:score()
+  elseif column == 'raw-start' then
+    return self.data['start']
+  elseif column == 'raw-end' then
+    return self.data['end']
   elseif self.data[column] then
     return self.data[column]
   else

@@ -220,7 +220,7 @@ function ASRControls:render_actions()
     if status then
       overlay = overlay .. ' - ' .. status
     end
-    ImGui.ProgressBar(Ctx(), progress, nil, nil, overlay)
+    ImGui.ProgressBar(Ctx(), progress, -1, nil, overlay)
   end
 end
 

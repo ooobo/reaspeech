@@ -115,7 +115,8 @@ end
 
 function ReaSpeechWorker:handle_request(request)
   self:log('Processing speech...')
-  self.job_count = #request.jobs
+  -- Accumulate job count to prevent progress from resetting when new requests come in
+  self.job_count = self.job_count + #request.jobs
 
   for _, job in ipairs(self:expand_jobs_from_request(request)) do
     table.insert(self.pending_jobs, job)

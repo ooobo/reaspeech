@@ -113,7 +113,8 @@ end
 
 ASRPlugin.new_transcript_name = function()
   local time = os.time()
-  local date_start = os.date('%b %d, %Y @ %I:%M', time)
+  -- Remove invalid filename characters (,  :, @) for Windows compatibility
+  local date_start = os.date('%b %d %Y - %I-%M', time)
   ---@diagnostic disable-next-line: param-type-mismatch
   local am_pm = string.lower(os.date('%p', time))
 

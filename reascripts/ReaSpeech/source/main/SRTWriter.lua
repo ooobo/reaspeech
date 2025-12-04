@@ -44,8 +44,8 @@ function SRTWriter:write(transcript)
 end
 
 function SRTWriter:write_segment(segment, sequence_number)
-  local start = segment:get('start')
-  local end_ = segment:get('end')
+  local start = segment:timeline_start_time()
+  local end_ = segment:timeline_end_time()
   local text = segment:get('text')
   self:write_line(text, sequence_number, start, end_)
 end

@@ -5,10 +5,10 @@
 ]]--
 
 Transcript = Polo {
-  COLUMN_ORDER = {"id", "seek", "start", "end", "text", "score", "file"},
+  COLUMN_ORDER = {"id", "seek", "start", "end", "raw-start", "raw-end", "text", "score", "file"},
   DEFAULT_HIDE = {
     seek = true, temperature = true, tokens = true, avg_logprob = true,
-    compression_ratio = true, no_speech_prob = true
+    compression_ratio = true, no_speech_prob = true, ['raw-start'] = true, ['raw-end'] = true
   },
 
   init = function(self)
