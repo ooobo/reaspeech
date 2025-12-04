@@ -107,8 +107,6 @@ end
 
 function ReaSpeechWorker:cancel()
   if self.active_job then
-    -- Note: We don't have a way to kill the process yet
-    -- Could be added to ProcessExecutor in the future
     self.active_job = nil
   end
   self.pending_jobs = {}
@@ -187,9 +185,6 @@ function ReaSpeechWorker:start_active_job()
 
   local active_job = self.active_job
   local request_type = active_job.request_type or 'transcribe'
-
-  -- Record start time for performance measurement
-  active_job.start_time = reaper.time_precise()
 
   -- Start process based on request type
   if request_type == 'detect_language' then

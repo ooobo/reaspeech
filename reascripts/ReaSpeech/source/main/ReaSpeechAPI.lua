@@ -239,11 +239,9 @@ function ReaSpeechAPI:detect_language(_audio_file, options)
   local output_file = Tempfile:name()
   local command = "echo '{\"language\": \"en\"}' > " .. self:quote_path(output_file)
 
-  local start_time = reaper.time_precise()
   local result = ExecProcess.new(command):background()
 
   if not result then
-    reaper.ShowConsoleMsg("ReaSpeech ERROR: Unable to start background process\n")
     if options.error_handler then
       options.error_handler("Unable to start background process")
     end
@@ -252,8 +250,6 @@ function ReaSpeechAPI:detect_language(_audio_file, options)
 
   return {
     output_file = output_file,
-    progress_file = nil,
-    start_time = start_time,
     complete = false,
     error_msg = nil,
     language = nil,
