@@ -13,15 +13,17 @@ ReaSpeechAPI = {
 }
 
 function ReaSpeechAPI:init(executable_path)
+  Logging().init(self, 'ReaSpeechAPI')
+
   self.executable_path, self.is_standalone = self:find_executable(executable_path)
   self.python_cmd = self:get_python_command()
 
   -- Log which executable mode we're using
   if self.is_standalone then
-    reaper.ShowConsoleMsg("ReaSpeech: Using standalone executable: " .. self.executable_path .. "\n")
+    self:log("Using standalone executable: " .. self.executable_path)
   else
-    reaper.ShowConsoleMsg("ReaSpeech: Using Python script: " .. self.executable_path .. "\n")
-    reaper.ShowConsoleMsg("ReaSpeech: Python command: " .. self.python_cmd .. "\n")
+    self:log("Using Python script: " .. self.executable_path)
+    self:log("Python command: " .. self.python_cmd)
   end
 end
 
@@ -137,10 +139,6 @@ function ReaSpeechAPI:transcribe(audio_file, options)
     return nil
   end
 
-  -- Create a logger instance for timing
-  local logger = Logging()
-  logger:init({}, "ReaSpeechAPI")
-
   -- Return a simple process object
   return {
     stdout_file = stdout_file,
@@ -150,7 +148,7 @@ function ReaSpeechAPI:transcribe(audio_file, options)
     complete = false,
     error_msg = nil,
     segments = {},
-    logger = logger,
+    logger = self,
 
     ready = function(self)
       if self.complete then
