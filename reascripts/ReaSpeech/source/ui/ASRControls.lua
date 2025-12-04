@@ -8,7 +8,7 @@ ASRControls = PluginControls {
   DEFAULT_TAB = 'asr',
 
   DEFAULT_LANGUAGE = '',
-  DEFAULT_MODEL_NAME = 'small',
+  DEFAULT_MODEL_NAME = ''nemo-parakeet-tdt-0.6b-v2', -- switch to v3 for euro languages
 
   HELP_MODEL = 'Model to use for transcription. Larger models provide better accuracy but use more resources like disk space and memory.',
   HELP_LANGUAGE = 'Language spoken in source audio.\nSet this to "Detect" to auto-detect the language.',
@@ -44,7 +44,7 @@ function ASRControls:init()
     translate = storage:boolean('translate', false),
     hotwords = storage:string('hotwords', ''),
     initial_prompt = storage:string('initial_prompt', ''),
-    model_name = storage:string('model_name', 'nemo-parakeet-tdt-0.6b-v2'),
+    model_name = storage:string('model_name', self.DEFAULT_MODEL_NAME),
     vad_filter = storage:boolean('vad_filter', true),
   }
 

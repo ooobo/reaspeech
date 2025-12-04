@@ -38,8 +38,7 @@ function ASRPlugin:asr(jobs)
   end
 
   -- Note: Some options like vad_filter, hotwords, initial_prompt, and translate
-  -- are not yet supported in the local executable backend
-  -- These may be added in future versions of parakeet_transcribe.py
+  -- are for Whisper, not supported by onnx-asr local executable
 
   -- consolidate jobs by path, retaining a collection of
   -- { item: MediaItem, take: MediaItem_Take } objects

@@ -130,7 +130,5 @@ function ReaSpeechUI:submit_request(request)
   -- endpoint field is optional now
   request.callback = request.callback or function() end
 
-  reaper.ShowConsoleMsg("ReaSpeech: Submitting request with " .. #request.jobs .. " job(s)\n")
-
   table.insert(self.requests, request)
 end
