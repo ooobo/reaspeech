@@ -89,9 +89,10 @@ function ASRPlugin:handle_response(job_count)
     for _, segment in pairs(segments) do
       local best_item = nil
       local best_take = nil
+      local best_timeline_pos = math.huge
       local found_on_timeline = false
 
-      -- Try to find an item/take where this segment is on timeline
+      -- Try to find the item/take where this segment is on timeline (earliest position)
       for _, project_entry in pairs(job.project_entries) do
         local item = project_entry.item
         local take = project_entry.take
@@ -103,18 +104,21 @@ function ASRPlugin:handle_response(job_count)
         end
 
         -- Check if this segment is within this item's clip boundaries
-        if not found_on_timeline then
-          local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
-          local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
-          local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
+        local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
+        local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
+        local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
 
-          local source_length = item_length * playrate
-          local clip_end = startoffs + source_length
+        local source_length = item_length * playrate
+        local clip_end = startoffs + source_length
 
-          -- Check if segment is within the clipped portion
-          if segment.start >= startoffs and segment['end'] <= clip_end then
+        -- Check if segment is within the clipped portion
+        if segment.start >= startoffs and segment['end'] <= clip_end then
+          -- Found a match - check if this is earlier on timeline than previous matches
+          local timeline_pos = reaper.GetMediaItemInfo_Value(item, 'D_POSITION')
+          if timeline_pos < best_timeline_pos then
             best_item = item
             best_take = take
+            best_timeline_pos = timeline_pos
             found_on_timeline = true
           end
         end
