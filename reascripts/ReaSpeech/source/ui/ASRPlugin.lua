@@ -84,17 +84,35 @@ function ASRPlugin:handle_response(job_count)
     local segments = response[1].segments
     local job = response._job
 
-    for _, project_entry in pairs(job.project_entries) do
-      local item = project_entry.item
-      local take = project_entry.take
+    -- For each transcription segment, find the item/take where it appears on timeline
+    -- This avoids creating duplicate segments
+    for _, segment in pairs(segments) do
+      local segment_added = false
 
-      for _, segment in pairs(segments) do
-        local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+      -- Try to find an item/take where this segment is on timeline
+      for _, project_entry in pairs(job.project_entries) do
+        if not segment_added then
+          local item = project_entry.item
+          local take = project_entry.take
 
-        for _, s in pairs(from_whisper) do
-          -- do we get a lot of textless segments? thinking emoji
-          if s:get('text') then
-            transcript:add_segment(s)
+          -- Check if this segment is within this item's clip boundaries
+          local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
+          local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
+          local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
+
+          local source_length = item_length * playrate
+          local clip_end = startoffs + source_length
+
+          -- Check if segment is within the clipped portion
+          if segment.start >= startoffs and segment['end'] <= clip_end then
+            local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+
+            for _, s in pairs(from_whisper) do
+              if s:get('text') then
+                transcript:add_segment(s)
+                segment_added = true
+              end
+            end
           end
         end
       end
