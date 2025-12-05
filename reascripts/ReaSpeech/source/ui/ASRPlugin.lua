@@ -84,6 +84,9 @@ function ASRPlugin:handle_response(job_count)
     local segments = response[1].segments
     local job = response._job
 
+    -- Store raw transcription data for later regeneration
+    transcript:add_raw_transcription(job.path, segments)
+
     -- For each transcription segment, create entries for ALL item/take pairs where it appears
     -- This creates duplicate entries when the same audio appears multiple times on timeline
     for _, segment in pairs(segments) do

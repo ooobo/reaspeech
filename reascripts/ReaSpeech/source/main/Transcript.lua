@@ -31,6 +31,9 @@ function Transcript:clear()
   self.filtered_data = {}
   self.data = {}
   self.search = ''
+  -- Store raw transcription data for regeneration
+  -- Format: { path = "file.wav", segments = {...} }
+  self.raw_transcriptions = self.raw_transcriptions or {}
 end
 
 function Transcript:get_columns()
@@ -83,6 +86,103 @@ end
 
 function Transcript:add_segment(segment)
   table.insert(self.init_data, segment)
+end
+
+function Transcript:add_raw_transcription(path, segments)
+  -- Store raw transcription data for later regeneration
+  table.insert(self.raw_transcriptions, {
+    path = path,
+    segments = segments
+  })
+end
+
+function Transcript:regenerate()
+  -- Clear existing segments
+  self.init_data = {}
+
+  -- For each transcribed file, find all items on timeline and regenerate segments
+  for _, transcription in pairs(self.raw_transcriptions) do
+    local path = transcription.path
+    local segments = transcription.segments
+
+    -- Find all items/takes on timeline that use this file
+    local matching_items = self:find_items_by_path(path)
+
+    -- For each segment, create entries for all matching items where it appears
+    for _, segment in pairs(segments) do
+      local created_any = false
+
+      for _, entry in pairs(matching_items) do
+        local item = entry.item
+        local take = entry.take
+
+        -- Check if this segment is within this item's clip boundaries
+        if reaper.ValidatePtr2(0, item, 'MediaItem*') and reaper.ValidatePtr2(0, take, 'MediaItem_Take*') then
+          local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
+          local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
+          local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
+
+          local source_length = item_length * playrate
+          local clip_end = startoffs + source_length
+
+          -- Check if segment is within the clipped portion
+          if segment.start >= startoffs and segment['end'] <= clip_end then
+            -- Create segment for this item/take
+            local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+
+            for _, s in pairs(from_whisper) do
+              if s:get('text') then
+                self:add_segment(s)
+                created_any = true
+              end
+            end
+          end
+        end
+      end
+
+      -- If segment wasn't on timeline in any clip, create with first matching item/take as fallback
+      if not created_any and matching_items[1] then
+        local item = matching_items[1].item
+        local take = matching_items[1].take
+        if reaper.ValidatePtr2(0, item, 'MediaItem*') and reaper.ValidatePtr2(0, take, 'MediaItem_Take*') then
+          local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+
+          for _, s in pairs(from_whisper) do
+            if s:get('text') then
+              self:add_segment(s)
+            end
+          end
+        end
+      end
+    end
+  end
+
+  -- Update and sort the transcript
+  self:update()
+  self:sort('start', true)
+end
+
+function Transcript:find_items_by_path(path)
+  -- Find all items/takes in the project that use this file path
+  local matching_items = {}
+  local num_items = reaper.CountMediaItems(0)
+
+  for i = 0, num_items - 1 do
+    local item = reaper.GetMediaItem(0, i)
+    local take = reaper.GetActiveTake(item)
+
+    if take then
+      local source = reaper.GetMediaItemTake_Source(take)
+      if source then
+        local source_path = reaper.GetMediaSourceFileName(source)
+        if source_path == path then
+          table.insert(matching_items, { item = item, take = take })
+        end
+      end
+    end
+  end
+
+  return matching_items
 end
 
 function Transcript:has_segments()

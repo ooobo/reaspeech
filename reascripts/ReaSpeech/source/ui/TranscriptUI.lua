@@ -370,6 +370,8 @@ end
 function TranscriptUI:render_result_actions()
   self:render_annotations_button()
   ImGui.SameLine(Ctx())
+  self:render_refresh()
+  ImGui.SameLine(Ctx())
   self:render_export()
   ImGui.SameLine(Ctx())
   self:render_clear()
@@ -378,6 +380,12 @@ end
 function TranscriptUI:render_annotations_button()
   if ImGui.Button(Ctx(), "Create Markers") then
     self.annotations:present()
+  end
+end
+
+function TranscriptUI:render_refresh()
+  if ImGui.Button(Ctx(), "Refresh") then
+    self:handle_refresh()
   end
 end
 
@@ -433,6 +441,10 @@ end
 
 function TranscriptUI:handle_export()
   self.transcript_exporter:present()
+end
+
+function TranscriptUI:handle_refresh()
+  self.transcript:regenerate()
 end
 
 function TranscriptUI:handle_transcript_clear()
