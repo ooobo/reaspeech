@@ -87,15 +87,23 @@ function ASRPlugin:handle_response(job_count)
     -- For each transcription segment, find the item/take where it appears on timeline
     -- This avoids creating duplicate segments
     for _, segment in pairs(segments) do
-      local segment_added = false
+      local best_item = nil
+      local best_take = nil
+      local found_on_timeline = false
 
       -- Try to find an item/take where this segment is on timeline
       for _, project_entry in pairs(job.project_entries) do
-        if not segment_added then
-          local item = project_entry.item
-          local take = project_entry.take
+        local item = project_entry.item
+        local take = project_entry.take
 
-          -- Check if this segment is within this item's clip boundaries
+        -- Remember first item/take as fallback
+        if not best_item then
+          best_item = item
+          best_take = take
+        end
+
+        -- Check if this segment is within this item's clip boundaries
+        if not found_on_timeline then
           local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
           local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
           local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
@@ -105,14 +113,20 @@ function ASRPlugin:handle_response(job_count)
 
           -- Check if segment is within the clipped portion
           if segment.start >= startoffs and segment['end'] <= clip_end then
-            local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+            best_item = item
+            best_take = take
+            found_on_timeline = true
+          end
+        end
+      end
 
-            for _, s in pairs(from_whisper) do
-              if s:get('text') then
-                transcript:add_segment(s)
-                segment_added = true
-              end
-            end
+      -- Create segment with the best item/take found (either on timeline or first one)
+      if best_item and best_take then
+        local from_whisper = TranscriptSegment.from_whisper(segment, best_item, best_take)
+
+        for _, s in pairs(from_whisper) do
+          if s:get('text') then
+            transcript:add_segment(s)
           end
         end
       end
