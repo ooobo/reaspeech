@@ -84,24 +84,15 @@ function ASRPlugin:handle_response(job_count)
     local segments = response[1].segments
     local job = response._job
 
-    -- For each transcription segment, find the item/take where it appears on timeline
-    -- This avoids creating duplicate segments
+    -- For each transcription segment, create entries for ALL item/take pairs where it appears
+    -- This creates duplicate entries when the same audio appears multiple times on timeline
     for _, segment in pairs(segments) do
-      local best_item = nil
-      local best_take = nil
-      local best_timeline_pos = math.huge
-      local found_on_timeline = false
+      local created_any = false
 
-      -- Try to find the item/take where this segment is on timeline (earliest position)
+      -- Check each item/take pair where the file appears
       for _, project_entry in pairs(job.project_entries) do
         local item = project_entry.item
         local take = project_entry.take
-
-        -- Remember first item/take as fallback
-        if not best_item then
-          best_item = item
-          best_take = take
-        end
 
         -- Check if this segment is within this item's clip boundaries
         local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
@@ -113,20 +104,23 @@ function ASRPlugin:handle_response(job_count)
 
         -- Check if segment is within the clipped portion
         if segment.start >= startoffs and segment['end'] <= clip_end then
-          -- Found a match - check if this is earlier on timeline than previous matches
-          local timeline_pos = reaper.GetMediaItemInfo_Value(item, 'D_POSITION')
-          if timeline_pos < best_timeline_pos then
-            best_item = item
-            best_take = take
-            best_timeline_pos = timeline_pos
-            found_on_timeline = true
+          -- Create segment for this item/take
+          local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+
+          for _, s in pairs(from_whisper) do
+            if s:get('text') then
+              transcript:add_segment(s)
+              created_any = true
+            end
           end
         end
       end
 
-      -- Create segment with the best item/take found (either on timeline or first one)
-      if best_item and best_take then
-        local from_whisper = TranscriptSegment.from_whisper(segment, best_item, best_take)
+      -- If segment wasn't on timeline in any clip, create with first item/take as fallback
+      if not created_any and job.project_entries[1] then
+        local item = job.project_entries[1].item
+        local take = job.project_entries[1].take
+        local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
 
         for _, s in pairs(from_whisper) do
           if s:get('text') then
