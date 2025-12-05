@@ -37,9 +37,9 @@ function TranscriptAnnotationsUI:init_annotation_types()
   local has_words = self.transcript:has_words()
 
   self.annotation_types = TranscriptAnnotationTypes.new {
+    TranscriptAnnotationTypes.take_markers(has_words),
     TranscriptAnnotationTypes.project_markers(has_words),
     TranscriptAnnotationTypes.project_regions(has_words),
-    TranscriptAnnotationTypes.take_markers(has_words),
     TranscriptAnnotationTypes.notes_track(has_words)
   }
 end

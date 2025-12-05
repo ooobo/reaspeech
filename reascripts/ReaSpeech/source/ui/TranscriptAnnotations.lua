@@ -18,6 +18,7 @@ function TranscriptAnnotations:take_markers(use_words, track_filter_config)
     local oddly_specific_black = 0x01030405
 
     local takes = {}
+    local processed_markers = {} -- Track which markers we've already created: {take_guid}-{start}-{text}
 
     for element in self.transcript:iterator(use_words) do
       local _, take_guid = reaper.GetSetMediaItemTakeInfo_String(element.take, 'GUID', '', false)
@@ -41,8 +42,15 @@ function TranscriptAnnotations:take_markers(use_words, track_filter_config)
         end
       end
 
+      -- Create markers on each take, but avoid duplicates
       for _, take in ipairs(takes[take_guid]) do
-        reaper.SetTakeMarker(take, -1, element.text, element.start, oddly_specific_black)
+        local _, current_take_guid = reaper.GetSetMediaItemTakeInfo_String(take, 'GUID', '', false)
+        local marker_key = current_take_guid .. '-' .. tostring(element.start) .. '-' .. element.text
+
+        if not processed_markers[marker_key] then
+          reaper.SetTakeMarker(take, -1, element.text, element.start, oddly_specific_black)
+          processed_markers[marker_key] = true
+        end
       end
     end
 end

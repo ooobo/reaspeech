@@ -88,11 +88,14 @@ function Transcript:add_segment(segment)
   table.insert(self.init_data, segment)
 end
 
-function Transcript:add_raw_transcription(path, segments)
+function Transcript:add_raw_transcription(path, segments, fallback_item, fallback_take)
   -- Store raw transcription data for later regeneration
+  -- fallback_item/take are used when no clips exist on timeline (to show segments with "-" times)
   table.insert(self.raw_transcriptions, {
     path = path,
-    segments = segments
+    segments = segments,
+    fallback_item = fallback_item,
+    fallback_take = fallback_take
   })
 end
 
@@ -140,11 +143,13 @@ function Transcript:regenerate()
         end
       end
 
-      -- If segment wasn't on timeline in any clip, create with first matching item/take as fallback
-      if not created_any and matching_items[1] then
-        local item = matching_items[1].item
-        local take = matching_items[1].take
-        if reaper.ValidatePtr2(0, item, 'MediaItem*') and reaper.ValidatePtr2(0, take, 'MediaItem_Take*') then
+      -- If segment wasn't on timeline in any clip, create with fallback item/take
+      -- This ensures segments remain visible even when all clips are removed (they'll show "-" for timeline times)
+      if not created_any then
+        local item = matching_items[1] and matching_items[1].item or transcription.fallback_item
+        local take = matching_items[1] and matching_items[1].take or transcription.fallback_take
+
+        if item and take then
           local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
 
           for _, s in pairs(from_whisper) do

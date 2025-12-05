@@ -85,7 +85,10 @@ function ASRPlugin:handle_response(job_count)
     local job = response._job
 
     -- Store raw transcription data for later regeneration
-    transcript:add_raw_transcription(job.path, segments)
+    -- Include first item/take as fallback reference for when clips are removed from timeline
+    local fallback_item = job.project_entries[1] and job.project_entries[1].item
+    local fallback_take = job.project_entries[1] and job.project_entries[1].take
+    transcript:add_raw_transcription(job.path, segments, fallback_item, fallback_take)
 
     -- For each transcription segment, create entries for ALL item/take pairs where it appears
     -- This creates duplicate entries when the same audio appears multiple times on timeline
