@@ -220,7 +220,8 @@ function ASRControls:render_actions()
     if status then
       overlay = overlay .. ' - ' .. status
     end
-    ImGui.ProgressBar(Ctx(), progress, -1, nil, overlay)
+    -- Use explicit size for progress bar to fix text alignment
+    ImGui.ProgressBar(Ctx(), progress, -1, 0, overlay)
   end
 end
 

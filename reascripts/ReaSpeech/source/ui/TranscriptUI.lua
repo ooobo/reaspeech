@@ -620,8 +620,8 @@ function TranscriptUI:sort_table()
   local specs_dirty, has_specs = ImGui.TableNeedSort(Ctx())
   if not specs_dirty then return end
 
+  -- Don't reset to unsorted if no specs - preserve default sort
   if not has_specs then
-    self.transcript:update()
     return
   end
 
