@@ -456,6 +456,54 @@ function TranscriptUI:handle_search(search)
   self.transcript:update()
 end
 
+function TranscriptUI:insert_media_at_cursor(segment, raw_start, raw_end)
+  -- Get the file path from the segment's take
+  local file_path = segment:get_file_with_extension()
+
+  -- Get full path from take source
+  local source = reaper.GetMediaItemTake_Source(segment.take)
+  if source then
+    file_path = reaper.GetMediaSourceFileName(source)
+  end
+
+  -- Get selected track, or use first track if none selected
+  local track = reaper.GetSelectedTrack(0, 0)
+  if not track then
+    if reaper.CountTracks(0) == 0 then
+      reaper.InsertTrackAtIndex(0, false)
+    end
+    track = reaper.GetTrack(0, 0)
+  end
+
+  -- Get edit cursor position
+  local cursor_pos = reaper.GetCursorPosition()
+
+  -- Calculate item length
+  local item_length = raw_end - raw_start
+
+  -- Begin undo block
+  reaper.Undo_BeginBlock()
+
+  -- Insert media item
+  local item = reaper.AddMediaItemToTrack(track)
+  reaper.SetMediaItemInfo_Value(item, 'D_POSITION', cursor_pos)
+  reaper.SetMediaItemInfo_Value(item, 'D_LENGTH', item_length)
+
+  -- Add take and set source
+  local take = reaper.AddTakeToMediaItem(item)
+  local pcm_source = reaper.PCM_Source_CreateFromFile(file_path)
+  reaper.SetMediaItemTake_Source(take, pcm_source)
+
+  -- Set take offset to raw_start
+  reaper.SetMediaItemTakeInfo_Value(take, 'D_STARTOFFS', raw_start)
+
+  -- Update timeline
+  reaper.UpdateArrange()
+  reaper.UpdateTimeline()
+
+  reaper.Undo_EndBlock(string.format("Insert %s at cursor", segment:get('insert file', '')), -1)
+end
+
 function TranscriptUI:render_table()
   local columns = self.transcript:get_columns()
   local num_columns = #columns + 1
@@ -547,6 +595,22 @@ function TranscriptUI:render_table_cell(segment, column)
       ImGui.Text(Ctx(), reaper.format_timestr(time_value, ''))
     else
       ImGui.Text(Ctx(), '-')
+    end
+  elseif column == 'insert file' then
+    -- Clickable file column that inserts media at cursor
+    local filename = segment:get(column, "")
+    local raw_start = segment:get('raw-start')
+    local raw_end = segment:get('raw-end')
+
+    Widgets.link(filename, function()
+      self:insert_media_at_cursor(segment, raw_start, raw_end)
+    end)
+
+    -- Show tooltip on hover
+    if ImGui.IsItemHovered(Ctx()) then
+      ImGui.SetTooltip(Ctx(), string.format("Insert %s-%s",
+        reaper.format_timestr(raw_start, ''),
+        reaper.format_timestr(raw_end, '')))
     end
   else
     local value = segment:get(column)

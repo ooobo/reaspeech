@@ -26,7 +26,7 @@ function TranscriptSegment:init()
   assert(self.item, 'missing item')
   assert(self.take, 'missing take')
   self.data = self._copy(self.data)
-  self.data['file'] = self:get_file()
+  self.data['insert file'] = self:get_file()
 end
 
 TranscriptSegment.from_whisper = function(segment, item, take)
