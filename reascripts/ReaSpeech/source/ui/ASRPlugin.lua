@@ -119,6 +119,8 @@ function ASRPlugin:handle_response(job_count)
     end
 
     transcript:update()
+    -- Sort by start time ascending by default for most useful view
+    transcript:sort('start', true)
 
     job_count = job_count - 1
 

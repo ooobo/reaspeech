@@ -134,8 +134,9 @@ function Transcript:iterator(use_words)
 
         return {
           id = segment:get('id'),
-          start = segment:get('start'),
-          end_ = segment:get('end'),
+          -- Use raw times for marker creation (markers go at file positions, not timeline positions)
+          start = segment:get('raw-start'),
+          end_ = segment:get('raw-end'),
           text = segment:get('text'),
           item = segment.item,
           take = segment.take,
