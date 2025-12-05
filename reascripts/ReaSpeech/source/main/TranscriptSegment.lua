@@ -197,6 +197,11 @@ function TranscriptSegment:get_file(include_extensions)
 
   local file = ''
   Trap(function ()
+    -- Validate take is still valid before accessing it
+    if not reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
+      return
+    end
+
     local source = reaper.GetMediaItemTake_Source(self.take)
     if source then
       local source_path = reaper.GetMediaSourceFileName(source)
@@ -237,6 +242,14 @@ function TranscriptSegment:navigate(word_index, autoplay)
 end
 
 function TranscriptSegment:is_on_timeline()
+  -- Validate that item and take are still valid (they become invalid if cut/pasted)
+  if not reaper.ValidatePtr2(0, self.item, 'MediaItem*') then
+    return false
+  end
+  if not reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
+    return false
+  end
+
   local startoffs = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
   local item_length = reaper.GetMediaItemInfo_Value(self.item, 'D_LENGTH')
   local playrate = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_PLAYRATE')
