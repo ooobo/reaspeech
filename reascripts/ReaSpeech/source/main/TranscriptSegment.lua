@@ -27,6 +27,8 @@ function TranscriptSegment:init()
   assert(self.take, 'missing take')
   self.data = self._copy(self.data)
   self.data['insert file'] = self:get_file()
+  -- Store full source path for later insertion if item is deleted
+  self.data['_source_path'] = self:get_source_path()
 end
 
 TranscriptSegment.from_whisper = function(segment, item, take)
@@ -220,6 +222,19 @@ function TranscriptSegment:get_file_with_extension()
   return self:get_file(true)
 end
 
+function TranscriptSegment:get_source_path()
+  local source_path = ''
+  if self.take and reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
+    Trap(function ()
+      local source = reaper.GetMediaItemTake_Source(self.take)
+      if source then
+        source_path = reaper.GetMediaSourceFileName(source)
+      end
+    end)
+  end
+  return source_path
+end
+
 function TranscriptSegment:navigate(word_index, autoplay)
   -- Don't navigate if segment is not on timeline
   if not self:is_on_timeline() then
@@ -310,8 +325,13 @@ function TranscriptSegment:to_table()
     end
   end
 
-  result.item = ReaUtil.get_item_info(self.item, 'GUID')
-  result.take = ReaUtil.get_take_info(self.take, 'GUID')
+  -- Handle potentially deleted/invalid items gracefully
+  if self.item and reaper.ValidatePtr2(0, self.item, 'MediaItem*') then
+    result.item = ReaUtil.get_item_info(self.item, 'GUID')
+  end
+  if self.take and reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
+    result.take = ReaUtil.get_take_info(self.take, 'GUID')
+  end
   return result
 end
 

@@ -457,13 +457,22 @@ function TranscriptUI:handle_search(search)
 end
 
 function TranscriptUI:insert_media_at_cursor(segment, raw_start, raw_end)
-  -- Get the file path from the segment's take
-  local file_path = segment:get_file_with_extension()
+  -- Get the file path from the segment's take (handles invalid takes)
+  local file_path = segment:get_source_path()
 
-  -- Get full path from take source
-  local source = reaper.GetMediaItemTake_Source(segment.take)
-  if source then
-    file_path = reaper.GetMediaSourceFileName(source)
+  -- If no path from current take, try stored path
+  if not file_path or file_path == '' then
+    file_path = segment.data._source_path
+    if not file_path or file_path == '' then
+      reaper.ShowConsoleMsg("Cannot find source file for segment\n")
+      return
+    end
+  end
+
+  -- Check if file exists
+  if not reaper.file_exists(file_path) then
+    reaper.ShowConsoleMsg("Source file not found: " .. file_path .. "\n")
+    return
   end
 
   -- Get selected track, or use first track if none selected
