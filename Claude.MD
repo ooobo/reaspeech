@@ -58,3 +58,29 @@ bad argument #1 to 'GetMediaItemTake_Source' (MediaItem_Take expected)
 ### Files Modified
 - `reascripts/ReaSpeech/source/main/TranscriptSegment.lua` - Export fixes + source path storage
 - `reascripts/ReaSpeech/source/ui/TranscriptUI.lua` - Insert fixes with validation
+
+---
+
+## Update: Add macOS Build to GitHub Workflow
+**Date:** 2025-12-10
+
+### Task
+Add macOS executable build to GitHub Actions workflow alongside existing Windows build.
+
+### Implementation
+Added `build-macos` job to `.github/workflows/build-executable.yml`:
+- **Runner:** `macos-latest`
+- **FFmpeg:** Installed via Homebrew
+- **Python:** 3.11 (same as Windows build)
+- **Output:** `parakeet-transcribe-macos` executable
+- **Testing:** Includes `--help` validation and executable permissions
+- **Artifact:** Uploaded with 90-day retention
+
+### Key Differences from Windows Build
+- Uses `brew install ffmpeg` instead of `choco`
+- Uses bash scripts instead of PowerShell
+- Executable has no `.exe` extension
+- Requires `chmod +x` before testing
+
+### Files Modified
+- `.github/workflows/build-executable.yml` - Added macOS build job

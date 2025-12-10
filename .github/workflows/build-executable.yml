@@ -69,3 +69,58 @@ jobs:
       run: |
         # Just check if it runs without error on --help
         dist/parakeet-transcribe-windows.exe --help
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install FFmpeg
+      run: |
+        brew install ffmpeg
+        ffmpeg -version
+
+    - name: Install dependencies
+      working-directory: python
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install onnx-asr onnxruntime numpy ffmpeg-python huggingface-hub
+
+    - name: Build executable
+      working-directory: python
+      run: |
+        pyinstaller parakeet_transcribe.spec
+
+    - name: Verify executable
+      working-directory: python
+      run: |
+        ls -lh dist/
+        if [ -f "dist/parakeet-transcribe-macos" ]; then
+          echo "✓ Executable built successfully"
+          size=$(du -h dist/parakeet-transcribe-macos | cut -f1)
+          echo "Executable size: $size"
+        else
+          echo "✗ Executable not found!"
+          exit 1
+        fi
+
+    - name: Upload executable as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: parakeet-transcribe-macos
+        path: python/dist/parakeet-transcribe-macos
+        retention-days: 90
+
+    - name: Test executable (basic check)
+      working-directory: python
+      run: |
+        # Just check if it runs without error on --help
+        chmod +x dist/parakeet-transcribe-macos
+        dist/parakeet-transcribe-macos --help
