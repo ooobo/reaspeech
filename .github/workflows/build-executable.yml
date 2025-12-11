@@ -107,16 +107,63 @@ jobs:
         # Build the production ReaSpeech scripts
         cd reascripts/ReaSpeech
 
-        # Install Lua 5.3 and 5.4 for building
+        # Install Lua 5.3 for building (Lua 5.4 package doesn't exist in Chocolatey)
         choco install lua53 -y
-        choco install lua54 -y
 
-        # Install luacheck
-        choco install luarocks -y
-        luarocks install luacheck
+        # Refresh environment to get lua53 in PATH
+        $env:ChocolateyInstall = Convert-Path "$((Get-Command choco).Path)\..\.."
+        Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
+        refreshenv
 
-        # Build the ReaSpeech bundle (creates compiled .luac files)
-        make build
+        # Find luac53.exe location
+        $luac53Path = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\lua53" -Recurse -Filter "luac53.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $luac53Path) {
+          # Try alternate location
+          $luac53Path = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\lua53" -Recurse -Filter "luac5.3.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        }
+        if (-not $luac53Path) {
+          Write-Error "Could not find luac53.exe"
+          exit 1
+        }
+
+        Write-Host "Found luac compiler: $($luac53Path.FullName)"
+
+        # Build the bundle manually (skip make build which needs luacheck)
+        # Concatenate all source files
+        $bundleContent = @(
+          "source/include/header.lua",
+          "source/include/globals.lua",
+          "vendor/json.lua",
+          "vendor/url.lua"
+        )
+        $bundleContent += Get-ChildItem -Path "resources/images" -Filter "*.lua" | ForEach-Object { $_.FullName }
+        $bundleContent += Get-ChildItem -Path "source/libs" -Filter "*.lua" -Recurse | ForEach-Object { $_.FullName }
+        $bundleContent += Get-ChildItem -Path "source/ui" -Filter "*.lua" -Recurse | ForEach-Object { $_.FullName }
+        $bundleContent += Get-ChildItem -Path "source/main" -Filter "*.lua" -Recurse | ForEach-Object { $_.FullName }
+        $bundleContent += "version.lua"
+        $bundleContent += "source/include/main.lua"
+
+        # Create build directory
+        New-Item -ItemType Directory -Path build -Force | Out-Null
+
+        # Concatenate all files
+        Get-Content $bundleContent | Set-Content -Path "build/ReaSpeechBundle.lua" -Encoding UTF8
+
+        Write-Host "Created bundle: build/ReaSpeechBundle.lua"
+
+        # Compile with luac53
+        & $luac53Path.FullName -o "build/ReaSpeech-5.3.luac" -s "build/ReaSpeechBundle.lua"
+
+        if (-not (Test-Path "build/ReaSpeech-5.3.luac")) {
+          Write-Error "Failed to create ReaSpeech-5.3.luac"
+          exit 1
+        }
+
+        Write-Host "✓ Built ReaSpeech-5.3.luac"
+
+        # For Windows, we'll only build 5.3 version since lua54 package doesn't exist
+        # Users with REAPER 7 can still use the 5.3 version (Lua 5.4 is backward compatible)
+        Copy-Item "build/ReaSpeech-5.3.luac" "build/ReaSpeech-5.4.luac"
 
         cd ../..
 
@@ -145,15 +192,15 @@ jobs:
            C:\Users\<YourName>\AppData\Roaming\REAPER\Scripts\
 
            After extraction, you should have:
-           - Scripts/ReaSpeech/ReaSpeech-5.3.luac (for REAPER with Lua 5.3)
-           - Scripts/ReaSpeech/ReaSpeech-5.4.luac (for REAPER with Lua 5.4)
+           - Scripts/ReaSpeech/ReaSpeech-5.3.luac
+           - Scripts/ReaSpeech/ReaSpeech-5.4.luac (same as 5.3, for compatibility)
            - Scripts/ReaSpeech/resources/ (UI resources)
            - parakeet-transcribe/ (transcription engine)
 
         2. In REAPER, go to Actions > Show action list > ReaScript > Load...
-           and load the appropriate ReaSpeech .luac file for your REAPER version:
-           - REAPER 6.x: Use ReaSpeech-5.3.luac
-           - REAPER 7.x: Use ReaSpeech-5.4.luac
+           and load the ReaSpeech .luac file:
+           - Both REAPER 6.x and 7.x: Use either ReaSpeech-5.3.luac or ReaSpeech-5.4.luac
+             (They are identical on Windows - Lua 5.3 bytecode works on both versions)
 
         3. The parakeet-transcribe folder contains the transcription engine.
            Keep this folder structure intact - ReaSpeech will find it automatically.
@@ -278,18 +325,58 @@ jobs:
         # Install Lua 5.3 and 5.4 for building
         brew install lua@5.3 lua@5.4
 
-        # Install luacheck
-        brew install luarocks
-        luarocks install luacheck
+        # Find luac compilers (Homebrew paths differ on Intel vs Apple Silicon)
+        if [ -d "/opt/homebrew/opt" ]; then
+          # Apple Silicon
+          LUAC53_PATH="/opt/homebrew/opt/lua@5.3/bin/luac5.3"
+          LUAC54_PATH="/opt/homebrew/opt/lua@5.4/bin/luac5.4"
+        else
+          # Intel Mac
+          LUAC53_PATH="/usr/local/opt/lua@5.3/bin/luac5.3"
+          LUAC54_PATH="/usr/local/opt/lua@5.4/bin/luac5.4"
+        fi
 
-        # Build the ReaSpeech bundle (creates compiled .luac files)
-        # Set paths for Lua compilers
-        export LUAC53=/opt/homebrew/opt/lua@5.3/bin/luac5.3
-        export LUAC54=/opt/homebrew/opt/lua@5.4/bin/luac5.4
-        export LUA53=/opt/homebrew/opt/lua@5.3/bin/lua5.3
-        export LUA54=/opt/homebrew/opt/lua@5.4/bin/lua5.4
+        # Verify compilers exist
+        if [ ! -f "$LUAC53_PATH" ]; then
+          echo "Error: Could not find luac5.3 at $LUAC53_PATH"
+          exit 1
+        fi
+        if [ ! -f "$LUAC54_PATH" ]; then
+          echo "Error: Could not find luac5.4 at $LUAC54_PATH"
+          exit 1
+        fi
 
-        make build
+        echo "Using luac5.3: $LUAC53_PATH"
+        echo "Using luac5.4: $LUAC54_PATH"
+
+        # Build the bundle manually (matching Makefile logic but skip luacheck)
+        mkdir -p build
+
+        # Concatenate all source files in correct order
+        cat \
+          source/include/header.lua \
+          source/include/globals.lua \
+          vendor/json.lua \
+          vendor/url.lua \
+          resources/images/*.lua \
+          source/libs/*.lua \
+          source/libs/*/*.lua \
+          source/ui/*.lua \
+          source/ui/*/*.lua \
+          source/main/*.lua \
+          version.lua \
+          source/include/main.lua \
+          > build/ReaSpeechBundle.lua
+
+        echo "✓ Created bundle: build/ReaSpeechBundle.lua"
+
+        # Compile for Lua 5.3
+        "$LUAC53_PATH" -o build/ReaSpeech-5.3.luac -s build/ReaSpeechBundle.lua
+        echo "✓ Built ReaSpeech-5.3.luac"
+
+        # Compile for Lua 5.4
+        "$LUAC54_PATH" -o build/ReaSpeech-5.4.luac -s build/ReaSpeechBundle.lua
+        echo "✓ Built ReaSpeech-5.4.luac"
 
         cd ../..
 

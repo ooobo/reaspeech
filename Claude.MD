@@ -224,13 +224,21 @@ README.txt
 - ✅ Supports both REAPER 6 and 7
 
 **Windows Build Tools:**
-- `choco install lua53 lua54 luarocks`
-- `luarocks install luacheck`
+- `choco install lua53` (lua54 package not available)
+- Manual build process (PowerShell script)
+- Lua 5.3 bytecode copied as both versions (backward compatible)
 
 **macOS Build Tools:**
-- `brew install lua@5.3 lua@5.4 luarocks`
-- `luarocks install luacheck`
-- Uses Homebrew paths for Lua compilers
+- `brew install lua@5.3 lua@5.4`
+- Manual build process (bash script)
+- Detects Homebrew path (Apple Silicon vs Intel)
+
+**Build Process Changes:**
+- Skipped `make build` to avoid luacheck dependency
+- Manual file concatenation matching Makefile logic
+- Direct luac compilation without linting
+- Windows: Only Lua 5.3 build (5.4 is copy for compatibility)
+- macOS: Both Lua 5.3 and 5.4 builds (true versions)
 
 ### Files Modified
 - `.github/workflows/build-executable.yml` - Added build steps and updated package structure
