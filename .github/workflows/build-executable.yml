@@ -132,7 +132,14 @@ jobs:
 
         # Add Script global configuration and save as ReaSpeech.lua
         # (REAPER loads .lua files, not .luac bytecode)
-        "-- ReaSpeech production configuration" | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- @description ReaSpeech - Speech recognition for REAPER" | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- @version 1.0.0" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- @author ReaSpeech Contributors" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- @about" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "--   # ReaSpeech" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "--   Speech recognition tool for REAPER using Parakeet ASR" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- ReaSpeech production configuration" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "Script = {" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         '  name = "ReaSpeech",' | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "  executable_path = nil," | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
@@ -193,17 +200,14 @@ jobs:
         Works with both REAPER 6.x (Lua 5.3) and REAPER 7.x (Lua 5.4).
         "@ | Out-File -FilePath package/ReaSpeech-Readme.txt -Encoding UTF8
 
-        # Create zip package
-        Compress-Archive -Path package/* -DestinationPath reaspeech-windows-package.zip -Force
-
-        Write-Host "✓ Package created: reaspeech-windows-package.zip"
-        Get-Item reaspeech-windows-package.zip | Select-Object Name, @{Name="Size (MB)";Expression={[math]::Round($_.Length / 1MB, 2)}}
+        Write-Host "✓ Package created"
+        Get-ChildItem package | Select-Object Name, @{Name="Size (MB)";Expression={[math]::Round($_.Length / 1MB, 2)}}
 
     - name: Upload deployment package
       uses: actions/upload-artifact@v4
       with:
         name: reaspeech-windows-package
-        path: reaspeech-windows-package.zip
+        path: package/
         retention-days: 90
 
   build-macos:
@@ -321,7 +325,14 @@ jobs:
 
         # Add Script global configuration and save as ReaSpeech.lua
         # (REAPER loads .lua files, not .luac bytecode)
-        echo "-- ReaSpeech production configuration" > build/ReaSpeech.lua
+        echo "-- @description ReaSpeech - Speech recognition for REAPER" > build/ReaSpeech.lua
+        echo "-- @version 1.0.0" >> build/ReaSpeech.lua
+        echo "-- @author ReaSpeech Contributors" >> build/ReaSpeech.lua
+        echo "-- @about" >> build/ReaSpeech.lua
+        echo "--   # ReaSpeech" >> build/ReaSpeech.lua
+        echo "--   Speech recognition tool for REAPER using Parakeet ASR" >> build/ReaSpeech.lua
+        echo "" >> build/ReaSpeech.lua
+        echo "-- ReaSpeech production configuration" >> build/ReaSpeech.lua
         echo "Script = {" >> build/ReaSpeech.lua
         echo '  name = "ReaSpeech",' >> build/ReaSpeech.lua
         echo "  executable_path = nil," >> build/ReaSpeech.lua
@@ -399,17 +410,12 @@ jobs:
         Works with both REAPER 6.x (Lua 5.3) and REAPER 7.x (Lua 5.4).
         EOF
 
-        # Create zip package
-        cd package
-        zip -r ../reaspeech-macos-package.zip *
-        cd ..
-
-        echo "✓ Package created: reaspeech-macos-package.zip"
-        ls -lh reaspeech-macos-package.zip
+        echo "✓ Package created"
+        ls -lh package/
 
     - name: Upload deployment package
       uses: actions/upload-artifact@v4
       with:
         name: reaspeech-macos-package
-        path: reaspeech-macos-package.zip
+        path: package/
         retention-days: 90
