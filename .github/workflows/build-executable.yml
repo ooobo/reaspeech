@@ -132,7 +132,7 @@ jobs:
 
         # Add Script global configuration and save as ReaSpeech.lua
         # (REAPER loads .lua files, not .luac bytecode)
-        @"
+        $scriptHeader = @'
 -- ReaSpeech production configuration
 Script = {
   name = "ReaSpeech",
@@ -142,7 +142,9 @@ Script = {
   timeout = 30000,
 }
 
-"@ + (Get-Content "build/ReaSpeechBundle.lua" -Raw) | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+'@
+        $bundleContent = Get-Content "build/ReaSpeechBundle.lua" -Raw
+        $scriptHeader + $bundleContent | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
 
         Write-Host "✓ Built ReaSpeech.lua"
 
