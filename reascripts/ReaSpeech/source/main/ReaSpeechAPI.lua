@@ -50,6 +50,7 @@ function ReaSpeechAPI:find_executable(custom_path)
   local script_dir = script_path:match("(.-)([^/\\]+)$")
 
   -- Check for standalone executable first (platform-specific)
+  -- Look in same directory as script
   local executable_name
   if EnvUtil.is_windows() then
     executable_name = "parakeet-transcribe-windows.exe"
@@ -59,9 +60,15 @@ function ReaSpeechAPI:find_executable(custom_path)
     executable_name = "parakeet-transcribe-linux"
   end
 
-  local executable_path = script_dir .. "python/dist/" .. executable_name
+  local executable_path = script_dir .. executable_name
   if reaper.file_exists(executable_path) then
     return executable_path, true
+  end
+
+  -- Fall back to development location (python/dist/)
+  local dev_executable_path = script_dir .. "python/dist/" .. executable_name
+  if reaper.file_exists(dev_executable_path) then
+    return dev_executable_path, true
   end
 
   -- Fall back to Python script
