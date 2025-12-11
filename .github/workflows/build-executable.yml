@@ -107,28 +107,7 @@ jobs:
         # Build the production ReaSpeech scripts
         cd reascripts/ReaSpeech
 
-        # Install Lua 5.3 for building (Lua 5.4 package doesn't exist in Chocolatey)
-        choco install lua53 -y
-
-        # Refresh environment to get lua53 in PATH
-        $env:ChocolateyInstall = Convert-Path "$((Get-Command choco).Path)\..\.."
-        Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-        refreshenv
-
-        # Find luac53.exe location
-        $luac53Path = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\lua53" -Recurse -Filter "luac53.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $luac53Path) {
-          # Try alternate location
-          $luac53Path = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\lua53" -Recurse -Filter "luac5.3.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-        }
-        if (-not $luac53Path) {
-          Write-Error "Could not find luac53.exe"
-          exit 1
-        }
-
-        Write-Host "Found luac compiler: $($luac53Path.FullName)"
-
-        # Build the bundle manually (skip make build which needs luacheck)
+        # Build the bundle (concatenate all source files - no compilation needed)
         # Concatenate all source files
         $bundleContent = @(
           "source/include/header.lua",
@@ -151,23 +130,29 @@ jobs:
 
         Write-Host "Created bundle: build/ReaSpeechBundle.lua"
 
-        # Compile with luac53
-        & $luac53Path.FullName -o "build/ReaSpeech.luac" -s "build/ReaSpeechBundle.lua"
+        # Add Script global configuration and save as ReaSpeech.lua
+        # (REAPER loads .lua files, not .luac bytecode)
+        @"
+-- ReaSpeech production configuration
+Script = {
+  name = "ReaSpeech",
+  executable_path = nil,
+  env = "production",
+  lua = _VERSION:match('[%d.]+'),
+  timeout = 30000,
+}
 
-        if (-not (Test-Path "build/ReaSpeech.luac")) {
-          Write-Error "Failed to create ReaSpeech.luac"
-          exit 1
-        }
+"@ + (Get-Content "build/ReaSpeechBundle.lua" -Raw) | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
 
-        Write-Host "✓ Built ReaSpeech.luac"
+        Write-Host "✓ Built ReaSpeech.lua"
 
         cd ../..
 
         # Create package directory (flat structure for direct extraction to Scripts/)
         New-Item -ItemType Directory -Path package -Force
 
-        # Copy ReaSpeech.luac to package root
-        Copy-Item -Path reascripts/ReaSpeech/build/ReaSpeech.luac -Destination package/
+        # Copy ReaSpeech.lua to package root
+        Copy-Item -Path reascripts/ReaSpeech/build/ReaSpeech.lua -Destination package/
 
         # Copy resources folder
         Copy-Item -Path reascripts/ReaSpeech/resources -Destination package/ -Recurse
@@ -186,13 +171,13 @@ jobs:
            C:\Users\<YourName>\AppData\Roaming\REAPER\Scripts\
 
            After extraction, you should have:
-           - ReaSpeech.luac (the main script)
+           - ReaSpeech.lua (the main script)
            - resources/ (UI resources)
            - parakeet-transcribe-windows.exe (transcription engine)
            - ffmpeg.exe (audio processing)
 
         2. In REAPER, go to Actions > Show action list > ReaScript > Load...
-           and load ReaSpeech.luac
+           and load ReaSpeech.lua
 
         ## Usage
 
@@ -315,21 +300,7 @@ jobs:
         # Build the production ReaSpeech scripts
         cd reascripts/ReaSpeech
 
-        # Install Lua 5.4 for building (5.3 deprecated in Homebrew as of 2024-12-14)
-        # Note: Homebrew installs this as 'lua' package (currently 5.4.8)
-        brew install lua
-
-        # Find luac compiler
-        LUAC_PATH=$(which luac)
-        if [ -z "$LUAC_PATH" ]; then
-          echo "Error: Could not find luac in PATH"
-          exit 1
-        fi
-
-        echo "Using luac: $LUAC_PATH"
-        luac -v
-
-        # Build the bundle manually (matching Makefile logic but skip luacheck)
+        # Build the bundle (concatenate all source files - no compilation needed)
         mkdir -p build
 
         # Concatenate all source files in correct order
@@ -349,17 +320,32 @@ jobs:
 
         echo "✓ Created bundle: build/ReaSpeechBundle.lua"
 
-        # Compile for Lua 5.4
-        "$LUAC_PATH" -o build/ReaSpeech.luac -s build/ReaSpeechBundle.lua
-        echo "✓ Built ReaSpeech.luac"
+        # Add Script global configuration and save as ReaSpeech.lua
+        # (REAPER loads .lua files, not .luac bytecode)
+        cat > build/ReaSpeech.lua << 'SCRIPT_HEADER'
+-- ReaSpeech production configuration
+Script = {
+  name = "ReaSpeech",
+  executable_path = nil,
+  env = "production",
+  lua = _VERSION:match('[%d.]+'),
+  timeout = 30000,
+}
+
+SCRIPT_HEADER
+
+        # Append the bundle content
+        cat build/ReaSpeechBundle.lua >> build/ReaSpeech.lua
+
+        echo "✓ Built ReaSpeech.lua"
 
         cd ../..
 
         # Create package directory (flat structure for direct extraction to Scripts/)
         mkdir -p package
 
-        # Copy ReaSpeech.luac to package root
-        cp reascripts/ReaSpeech/build/ReaSpeech.luac package/
+        # Copy ReaSpeech.lua to package root
+        cp reascripts/ReaSpeech/build/ReaSpeech.lua package/
 
         # Copy resources folder
         cp -r reascripts/ReaSpeech/resources package/
@@ -382,13 +368,13 @@ jobs:
            ~/Library/Application Support/REAPER/Scripts/
 
            After extraction, you should have:
-           - ReaSpeech.luac (the main script)
+           - ReaSpeech.lua (the main script)
            - resources/ (UI resources)
            - parakeet-transcribe-macos (transcription engine)
            - ffmpeg (audio processing)
 
         2. In REAPER, go to Actions > Show action list > ReaScript > Load...
-           and load ReaSpeech.luac
+           and load ReaSpeech.lua
 
         ## First Run - Security Note
 

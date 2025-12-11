@@ -198,7 +198,7 @@ Build compiled `.luac` bytecode files for both Lua 5.3 and 5.4:
 
 **Package Structure (Updated):**
 ```
-ReaSpeech.luac              (main script - works with both REAPER 6.x and 7.x)
+ReaSpeech.lua               (main script - works with both REAPER 6.x and 7.x)
 resources/                  (UI images, etc.)
 parakeet-transcribe-*       (platform executable: -windows.exe or -macos)
 ffmpeg                      (audio processing: .exe on Windows)
@@ -209,32 +209,20 @@ ReaSpeech-Readme.txt        (installation instructions)
 1. Extract package directly to REAPER Scripts directory
    - Windows: `C:\Users\<Name>\AppData\Roaming\REAPER\Scripts\`
    - macOS: `~/Library/Application Support/REAPER/Scripts/`
-2. In REAPER Actions, load `ReaSpeech.luac`
+2. In REAPER Actions, load `ReaSpeech.lua`
 3. Ready to use!
 
 **Benefits:**
 - ✅ Extract and run - no build required
-- ✅ Smaller file size (compiled bytecode)
-- ✅ Faster loading in REAPER
+- ✅ Single concatenated .lua file (REAPER can't load .luac bytecode)
 - ✅ Production-ready deployment
 - ✅ Supports both REAPER 6 and 7
 
-**Windows Build Tools:**
-- `choco install lua53` (lua54 package not available)
-- Manual build process (PowerShell script)
-- Compiles single `ReaSpeech.luac` using Lua 5.3
-
-**macOS Build Tools:**
-- `brew install lua@5.4` (lua@5.3 deprecated in Homebrew on 2024-12-14)
-- Manual build process (bash script)
-- Detects Homebrew path (Apple Silicon vs Intel)
-- Compiles single `ReaSpeech.luac` using Lua 5.4
-
-**Build Process Changes:**
-- Skipped `make build` to avoid luacheck dependency
+**Build Process:**
+- No Lua compiler needed (REAPER loads .lua source files, not .luac bytecode)
 - Manual file concatenation matching Makefile logic
-- Direct luac compilation without linting
-- Single `ReaSpeech.luac` file (works with both REAPER 6.x and 7.x)
+- Adds Script global configuration at top of bundle
+- Single `ReaSpeech.lua` file works with both REAPER 6.x and 7.x
 - Flat package structure for direct extraction to Scripts directory
 
 ### Files Modified
@@ -353,3 +341,46 @@ source/main/*.lua           (files only, no subdirectories)
 
 ### Files Modified
 - `.github/workflows/build-executable.yml` - Fixed Lua installation and file concatenation
+
+---
+
+## Update: Fix Build to Ship .lua Instead of .luac Bytecode
+**Date:** 2025-12-11
+
+### Problem
+REAPER cannot load .luac bytecode files directly - it only loads .lua source files.
+
+The build was compiling ReaSpeech to .luac bytecode using luac, but REAPER's dofile() and the ReaScript loader only work with .lua source files.
+
+### Solution
+Changed build process to ship concatenated .lua source instead of .luac bytecode:
+
+**Build Changes:**
+- Removed Lua compiler installation (no longer needed)
+- Concatenate all source files into `ReaSpeechBundle.lua`
+- Add Script global configuration at the top
+- Save as `ReaSpeech.lua` (source file, not bytecode)
+- Package includes `ReaSpeech.lua` instead of `ReaSpeech.luac`
+
+**Script Global Configuration (added to production build):**
+```lua
+Script = {
+  name = "ReaSpeech",
+  executable_path = nil,
+  env = "production",
+  lua = _VERSION:match('[%d.]+'),
+  timeout = 30000,
+}
+```
+
+This configuration was previously only in ReaSpeechDev.lua and needed to be added to the production bundle.
+
+**Benefits:**
+- ✅ REAPER can load the file directly
+- ✅ No Lua compiler dependency in CI/CD
+- ✅ Faster builds (no compilation step)
+- ✅ Easier debugging (source code visible)
+
+### Files Modified
+- `.github/workflows/build-executable.yml` - Removed luac compilation, ship .lua source
+- `Claude.MD` - Updated documentation
