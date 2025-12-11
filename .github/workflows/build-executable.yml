@@ -143,8 +143,8 @@ Script = {
 }
 
 '@
-        $bundleContent = Get-Content "build/ReaSpeechBundle.lua" -Raw
-        $scriptHeader + $bundleContent | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        $bundleText = Get-Content "build/ReaSpeechBundle.lua" -Raw
+        $scriptHeader + $bundleText | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
 
         Write-Host "✓ Built ReaSpeech.lua"
 
