@@ -70,7 +70,15 @@ jobs:
         # Just check if it runs without error on --help
         dist/parakeet-transcribe-windows.exe --help
 
+    - name: Cache FFmpeg for Windows
+      id: cache-ffmpeg-windows
+      uses: actions/cache@v4
+      with:
+        path: ffmpeg-cache-windows
+        key: ffmpeg-windows-essentials-v1
+
     - name: Download FFmpeg for Windows
+      if: steps.cache-ffmpeg-windows.outputs.cache-hit != 'true'
       run: |
         # Download FFmpeg from gyan.dev (essentials build)
         $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
@@ -80,12 +88,19 @@ jobs:
         # Find and copy ffmpeg.exe (it's in bin subdirectory)
         $ffmpegExe = Get-ChildItem -Path ffmpeg-temp -Recurse -Filter ffmpeg.exe | Select-Object -First 1
         if ($ffmpegExe) {
-          Copy-Item $ffmpegExe.FullName -Destination python/dist/
-          Write-Host "✓ FFmpeg copied to dist folder"
+          # Cache it for future runs
+          New-Item -ItemType Directory -Path ffmpeg-cache-windows -Force
+          Copy-Item $ffmpegExe.FullName -Destination ffmpeg-cache-windows/ffmpeg.exe
+          Write-Host "✓ FFmpeg downloaded and cached"
         } else {
           Write-Error "✗ FFmpeg executable not found in download!"
           exit 1
         }
+
+    - name: Copy FFmpeg from cache
+      run: |
+        Copy-Item -Path ffmpeg-cache-windows/ffmpeg.exe -Destination python/dist/
+        Write-Host "✓ FFmpeg copied to dist folder"
 
     - name: Create deployment package
       run: |
@@ -195,7 +210,15 @@ jobs:
         chmod +x dist/parakeet-transcribe-macos
         dist/parakeet-transcribe-macos --help
 
+    - name: Cache FFmpeg for macOS
+      id: cache-ffmpeg-macos
+      uses: actions/cache@v4
+      with:
+        path: ffmpeg-cache-macos
+        key: ffmpeg-macos-7.1-v1
+
     - name: Download FFmpeg for macOS
+      if: steps.cache-ffmpeg-macos.outputs.cache-hit != 'true'
       run: |
         # Download FFmpeg from evermeet.cx
         curl -L -o ffmpeg.7z https://evermeet.cx/ffmpeg/ffmpeg-7.1.7z
@@ -206,11 +229,18 @@ jobs:
         # Extract ffmpeg
         7z x ffmpeg.7z -o./
 
-        # Move to dist folder
-        chmod +x ffmpeg
-        mv ffmpeg python/dist/
+        # Cache it for future runs
+        mkdir -p ffmpeg-cache-macos
+        cp ffmpeg ffmpeg-cache-macos/
+        chmod +x ffmpeg-cache-macos/ffmpeg
 
-        echo "✓ FFmpeg downloaded and prepared"
+        echo "✓ FFmpeg downloaded and cached"
+
+    - name: Copy FFmpeg from cache
+      run: |
+        cp ffmpeg-cache-macos/ffmpeg python/dist/
+        chmod +x python/dist/ffmpeg
+        echo "✓ FFmpeg copied to dist folder"
         ls -lh python/dist/ffmpeg
 
     - name: Create deployment package

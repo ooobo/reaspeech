@@ -128,3 +128,47 @@ All artifacts retained for 90 days.
 
 ### Files Modified
 - `.github/workflows/build-executable.yml` - Added FFmpeg download and package creation steps
+
+---
+
+## Update: Add FFmpeg Caching
+**Date:** 2025-12-10
+
+### Task
+Add GitHub Actions caching for FFmpeg to avoid re-downloading on every build, improving build times while maintaining the simple bundled package approach.
+
+### Implementation
+Added `actions/cache@v4` to both Windows and macOS workflows:
+
+**Windows Caching:**
+- Cache key: `ffmpeg-windows-essentials-v1`
+- Cache path: `ffmpeg-cache-windows`
+- Only downloads if cache miss
+- Subsequent builds use cached FFmpeg (~50MB)
+
+**macOS Caching:**
+- Cache key: `ffmpeg-macos-7.1-v1`
+- Cache path: `ffmpeg-cache-macos`
+- Only downloads if cache miss
+- Subsequent builds use cached FFmpeg (~50MB)
+
+**How It Works:**
+1. Check cache for FFmpeg
+2. If cache hit: Copy from cache (fast)
+3. If cache miss: Download, extract, and cache for next run
+4. Copy to dist folder for packaging
+
+**Benefits:**
+- ✅ First build: Downloads FFmpeg (~2-3 minutes)
+- ✅ Subsequent builds: Uses cache (~5 seconds)
+- ✅ Users still get complete packages with FFmpeg bundled
+- ✅ No runtime downloads needed
+- ✅ Cache invalidation via version key bump
+
+**Cache Invalidation:**
+To update FFmpeg version, increment cache key:
+- Windows: `ffmpeg-windows-essentials-v2`
+- macOS: `ffmpeg-macos-7.2-v1` (update version in key)
+
+### Files Modified
+- `.github/workflows/build-executable.yml` - Added FFmpeg caching steps
