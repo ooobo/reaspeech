@@ -104,12 +104,32 @@ jobs:
 
     - name: Create deployment package
       run: |
+        # Build the production ReaSpeech scripts
+        cd reascripts/ReaSpeech
+
+        # Install Lua 5.3 and 5.4 for building
+        choco install lua53 -y
+        choco install lua54 -y
+
+        # Install luacheck
+        choco install luarocks -y
+        luarocks install luacheck
+
+        # Build the ReaSpeech bundle (creates compiled .luac files)
+        make build
+
+        cd ../..
+
         # Create package directory structure
-        New-Item -ItemType Directory -Path package/ReaSpeech -Force
+        New-Item -ItemType Directory -Path package/Scripts/ReaSpeech -Force
         New-Item -ItemType Directory -Path package/parakeet-transcribe -Force
 
-        # Copy ReaSpeech scripts (exclude tests and build artifacts)
-        Copy-Item -Path reascripts/ReaSpeech/* -Destination package/ReaSpeech/ -Recurse -Exclude @('tests', 'build', '*.pyc', '__pycache__')
+        # Copy built ReaSpeech files (compiled .luac versions)
+        Copy-Item -Path reascripts/ReaSpeech/build/ReaSpeech-5.3.luac -Destination package/Scripts/ReaSpeech/
+        Copy-Item -Path reascripts/ReaSpeech/build/ReaSpeech-5.4.luac -Destination package/Scripts/ReaSpeech/
+
+        # Copy resources folder (images, etc.)
+        Copy-Item -Path reascripts/ReaSpeech/resources -Destination package/Scripts/ReaSpeech/ -Recurse
 
         # Copy executables to parakeet-transcribe folder
         Copy-Item -Path python/dist/parakeet-transcribe-windows.exe -Destination package/parakeet-transcribe/
@@ -121,24 +141,31 @@ jobs:
 
         ## Installation
 
-        1. Copy the 'ReaSpeech' folder to your REAPER Scripts directory:
-           - Windows: C:\Users\<YourName>\AppData\Roaming\REAPER\Scripts\
+        1. Extract this package to your REAPER Scripts directory:
+           C:\Users\<YourName>\AppData\Roaming\REAPER\Scripts\
 
-        2. The parakeet-transcribe folder contains the transcription engine:
-           - parakeet-transcribe-windows.exe - Main transcription executable
-           - ffmpeg.exe - Audio processing (required)
+           After extraction, you should have:
+           - Scripts/ReaSpeech/ReaSpeech-5.3.luac (for REAPER with Lua 5.3)
+           - Scripts/ReaSpeech/ReaSpeech-5.4.luac (for REAPER with Lua 5.4)
+           - Scripts/ReaSpeech/resources/ (UI resources)
+           - parakeet-transcribe/ (transcription engine)
 
-        3. In REAPER, go to Actions > Show action list > ReaScript > Load...
-           and load ReaSpeech/ReaSpeechDev.lua
+        2. In REAPER, go to Actions > Show action list > ReaScript > Load...
+           and load the appropriate ReaSpeech .luac file for your REAPER version:
+           - REAPER 6.x: Use ReaSpeech-5.3.luac
+           - REAPER 7.x: Use ReaSpeech-5.4.luac
+
+        3. The parakeet-transcribe folder contains the transcription engine.
+           Keep this folder structure intact - ReaSpeech will find it automatically.
 
         ## Usage
 
-        The parakeet-transcribe executable will be called automatically by ReaSpeech.
-        Make sure both files stay in the same folder.
+        After loading the script in REAPER, access ReaSpeech from the Actions menu.
+        The parakeet-transcribe executable will be called automatically.
 
         ## Requirements
 
-        - REAPER with ReaImGui extension
+        - REAPER 6.0 or later with ReaImGui extension (v0.9+)
         - Windows 10 or later
         "@ | Out-File -FilePath package/README.txt -Encoding UTF8
 
@@ -245,13 +272,37 @@ jobs:
 
     - name: Create deployment package
       run: |
+        # Build the production ReaSpeech scripts
+        cd reascripts/ReaSpeech
+
+        # Install Lua 5.3 and 5.4 for building
+        brew install lua@5.3 lua@5.4
+
+        # Install luacheck
+        brew install luarocks
+        luarocks install luacheck
+
+        # Build the ReaSpeech bundle (creates compiled .luac files)
+        # Set paths for Lua compilers
+        export LUAC53=/opt/homebrew/opt/lua@5.3/bin/luac5.3
+        export LUAC54=/opt/homebrew/opt/lua@5.4/bin/luac5.4
+        export LUA53=/opt/homebrew/opt/lua@5.3/bin/lua5.3
+        export LUA54=/opt/homebrew/opt/lua@5.4/bin/lua5.4
+
+        make build
+
+        cd ../..
+
         # Create package directory structure
-        mkdir -p package/ReaSpeech
+        mkdir -p package/Scripts/ReaSpeech
         mkdir -p package/parakeet-transcribe
 
-        # Copy ReaSpeech scripts (exclude tests and build artifacts)
-        rsync -av --exclude='tests' --exclude='build' --exclude='*.pyc' --exclude='__pycache__' \
-          reascripts/ReaSpeech/ package/ReaSpeech/
+        # Copy built ReaSpeech files (compiled .luac versions)
+        cp reascripts/ReaSpeech/build/ReaSpeech-5.3.luac package/Scripts/ReaSpeech/
+        cp reascripts/ReaSpeech/build/ReaSpeech-5.4.luac package/Scripts/ReaSpeech/
+
+        # Copy resources folder (images, etc.)
+        cp -r reascripts/ReaSpeech/resources package/Scripts/ReaSpeech/
 
         # Copy executables to parakeet-transcribe folder
         cp python/dist/parakeet-transcribe-macos package/parakeet-transcribe/
@@ -267,32 +318,44 @@ jobs:
 
         ## Installation
 
-        1. Copy the 'ReaSpeech' folder to your REAPER Scripts directory:
-           - macOS: ~/Library/Application Support/REAPER/Scripts/
+        1. Extract this package to your REAPER Scripts directory:
+           ~/Library/Application Support/REAPER/Scripts/
 
-        2. The parakeet-transcribe folder contains the transcription engine:
-           - parakeet-transcribe-macos - Main transcription executable
-           - ffmpeg - Audio processing (required)
+           After extraction, you should have:
+           - Scripts/ReaSpeech/ReaSpeech-5.3.luac (for REAPER with Lua 5.3)
+           - Scripts/ReaSpeech/ReaSpeech-5.4.luac (for REAPER with Lua 5.4)
+           - Scripts/ReaSpeech/resources/ (UI resources)
+           - parakeet-transcribe/ (transcription engine)
 
-        3. In REAPER, go to Actions > Show action list > ReaScript > Load...
-           and load ReaSpeech/ReaSpeechDev.lua
+        2. In REAPER, go to Actions > Show action list > ReaScript > Load...
+           and load the appropriate ReaSpeech .luac file for your REAPER version:
+           - REAPER 6.x: Use ReaSpeech-5.3.luac
+           - REAPER 7.x: Use ReaSpeech-5.4.luac
 
-        ## First Run
+        3. The parakeet-transcribe folder contains the transcription engine.
+           Keep this folder structure intact - ReaSpeech will find it automatically.
 
-        On first run, you may need to allow the executables in System Preferences > Security & Privacy
-        if macOS blocks them. Alternatively, run these commands in Terminal:
+        ## First Run - Security Note
 
-           xattr -d com.apple.quarantine ~/path/to/parakeet-transcribe/parakeet-transcribe-macos
-           xattr -d com.apple.quarantine ~/path/to/parakeet-transcribe/ffmpeg
+        On first run, macOS Gatekeeper may block the executables. You have two options:
+
+        Option 1: Allow in System Settings
+        - When blocked, go to System Settings > Privacy & Security
+        - Click "Open Anyway" for each blocked executable
+
+        Option 2: Remove quarantine attribute (run these commands in Terminal):
+           cd ~/Library/Application\ Support/REAPER/Scripts/
+           xattr -d com.apple.quarantine parakeet-transcribe/parakeet-transcribe-macos
+           xattr -d com.apple.quarantine parakeet-transcribe/ffmpeg
 
         ## Usage
 
-        The parakeet-transcribe executable will be called automatically by ReaSpeech.
-        Make sure both files stay in the same folder.
+        After loading the script in REAPER, access ReaSpeech from the Actions menu.
+        The parakeet-transcribe executable will be called automatically.
 
         ## Requirements
 
-        - REAPER with ReaImGui extension
+        - REAPER 6.0 or later with ReaImGui extension (v0.9+)
         - macOS 10.15 (Catalina) or later
         EOF
 

@@ -172,3 +172,65 @@ To update FFmpeg version, increment cache key:
 
 ### Files Modified
 - `.github/workflows/build-executable.yml` - Added FFmpeg caching steps
+
+---
+
+## Update: Build Production ReaSpeech.luac Files
+**Date:** 2025-12-10
+
+### Task
+Update deployment packages to include production-ready compiled ReaSpeech files instead of development source files, making them ready to extract and run.
+
+### Problem
+Previous packages included the development source structure, requiring users to load `ReaSpeechDev.lua`. This wasn't a production-ready deployment.
+
+### Solution
+Build compiled `.luac` bytecode files for both Lua 5.3 and 5.4:
+
+**Build Process:**
+1. Install Lua 5.3 and 5.4 compilers
+2. Install luacheck for linting
+3. Run `make build` in `reascripts/ReaSpeech/`
+4. Creates:
+   - `build/ReaSpeechBundle.lua` (concatenated source)
+   - `build/ReaSpeech-5.3.luac` (compiled for Lua 5.3)
+   - `build/ReaSpeech-5.4.luac` (compiled for Lua 5.4)
+
+**Package Structure (Updated):**
+```
+Scripts/
+  ReaSpeech/
+    ReaSpeech-5.3.luac    (for REAPER 6.x)
+    ReaSpeech-5.4.luac    (for REAPER 7.x)
+    resources/            (UI images, etc.)
+parakeet-transcribe/
+  parakeet-transcribe-*   (platform executable)
+  ffmpeg                  (audio processing)
+README.txt
+```
+
+**User Installation:**
+1. Extract package to REAPER Scripts directory
+2. Load appropriate `.luac` file in REAPER Actions
+   - REAPER 6.x → ReaSpeech-5.3.luac
+   - REAPER 7.x → ReaSpeech-5.4.luac
+3. Ready to use!
+
+**Benefits:**
+- ✅ Extract and run - no build required
+- ✅ Smaller file size (compiled bytecode)
+- ✅ Faster loading in REAPER
+- ✅ Production-ready deployment
+- ✅ Supports both REAPER 6 and 7
+
+**Windows Build Tools:**
+- `choco install lua53 lua54 luarocks`
+- `luarocks install luacheck`
+
+**macOS Build Tools:**
+- `brew install lua@5.3 lua@5.4 luarocks`
+- `luarocks install luacheck`
+- Uses Homebrew paths for Lua compilers
+
+### Files Modified
+- `.github/workflows/build-executable.yml` - Added build steps and updated package structure
