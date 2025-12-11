@@ -229,16 +229,54 @@ README.txt
 - Lua 5.3 bytecode copied as both versions (backward compatible)
 
 **macOS Build Tools:**
-- `brew install lua@5.3 lua@5.4`
+- ~~`brew install lua@5.3 lua@5.4`~~ **UPDATED 2025-12-11**: Only `brew install lua@5.4`
 - Manual build process (bash script)
 - Detects Homebrew path (Apple Silicon vs Intel)
+- **Note**: lua@5.3 deprecated in Homebrew on 2024-12-14
 
 **Build Process Changes:**
 - Skipped `make build` to avoid luacheck dependency
 - Manual file concatenation matching Makefile logic
 - Direct luac compilation without linting
 - Windows: Only Lua 5.3 build (5.4 is copy for compatibility)
-- macOS: Both Lua 5.3 and 5.4 builds (true versions)
+- ~~macOS: Both Lua 5.3 and 5.4 builds (true versions)~~ **UPDATED**: Only Lua 5.4 build (5.3 is copy for compatibility)
 
 ### Files Modified
 - `.github/workflows/build-executable.yml` - Added build steps and updated package structure
+
+---
+
+## Update: Fix macOS Build After lua@5.3 Deprecation
+**Date:** 2025-12-11
+
+### Problem
+macOS build started failing with:
+```
+lua@5.3 has been disabled because it is deprecated upstream! It was disabled on 2024-12-14.
+```
+
+Homebrew deprecated the lua@5.3 package, making it unavailable for installation.
+
+### Solution
+Changed macOS build to mirror Windows approach - use only one Lua version and copy bytecode for compatibility:
+
+**Changes to `.github/workflows/build-executable.yml`:**
+- Changed from `brew install lua@5.3 lua@5.4` to only `brew install lua@5.4`
+- Updated path detection to find luac5.4 (supports Intel and Apple Silicon Macs)
+- Compile bundle with luac5.4 to create ReaSpeech-5.4.luac
+- Copy ReaSpeech-5.4.luac as ReaSpeech-5.3.luac for compatibility
+
+**Backward Compatibility:**
+Lua 5.4 bytecode is compatible with Lua 5.3 runtime in most cases. Both REAPER 6.x (Lua 5.3) and REAPER 7.x (Lua 5.4) can run the compiled bytecode.
+
+**Path Detection:**
+```bash
+if [ -d "/opt/homebrew/opt" ]; then
+  LUAC54_PATH="/opt/homebrew/opt/lua@5.4/bin/luac5.4"  # Apple Silicon
+else
+  LUAC54_PATH="/usr/local/opt/lua@5.4/bin/luac5.4"     # Intel Mac
+fi
+```
+
+### Files Modified
+- `.github/workflows/build-executable.yml` - Updated macOS Lua installation and compilation

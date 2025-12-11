@@ -322,31 +322,24 @@ jobs:
         # Build the production ReaSpeech scripts
         cd reascripts/ReaSpeech
 
-        # Install Lua 5.3 and 5.4 for building
-        brew install lua@5.3 lua@5.4
+        # Install Lua 5.4 for building (5.3 deprecated in Homebrew as of 2024-12-14)
+        brew install lua@5.4
 
-        # Find luac compilers (Homebrew paths differ on Intel vs Apple Silicon)
+        # Find luac compiler (Homebrew paths differ on Intel vs Apple Silicon)
         if [ -d "/opt/homebrew/opt" ]; then
           # Apple Silicon
-          LUAC53_PATH="/opt/homebrew/opt/lua@5.3/bin/luac5.3"
           LUAC54_PATH="/opt/homebrew/opt/lua@5.4/bin/luac5.4"
         else
           # Intel Mac
-          LUAC53_PATH="/usr/local/opt/lua@5.3/bin/luac5.3"
           LUAC54_PATH="/usr/local/opt/lua@5.4/bin/luac5.4"
         fi
 
-        # Verify compilers exist
-        if [ ! -f "$LUAC53_PATH" ]; then
-          echo "Error: Could not find luac5.3 at $LUAC53_PATH"
-          exit 1
-        fi
+        # Verify compiler exists
         if [ ! -f "$LUAC54_PATH" ]; then
           echo "Error: Could not find luac5.4 at $LUAC54_PATH"
           exit 1
         fi
 
-        echo "Using luac5.3: $LUAC53_PATH"
         echo "Using luac5.4: $LUAC54_PATH"
 
         # Build the bundle manually (matching Makefile logic but skip luacheck)
@@ -370,13 +363,13 @@ jobs:
 
         echo "✓ Created bundle: build/ReaSpeechBundle.lua"
 
-        # Compile for Lua 5.3
-        "$LUAC53_PATH" -o build/ReaSpeech-5.3.luac -s build/ReaSpeechBundle.lua
-        echo "✓ Built ReaSpeech-5.3.luac"
-
         # Compile for Lua 5.4
         "$LUAC54_PATH" -o build/ReaSpeech-5.4.luac -s build/ReaSpeechBundle.lua
         echo "✓ Built ReaSpeech-5.4.luac"
+
+        # Copy as 5.3 version for compatibility (Lua 5.4 bytecode works on both REAPER versions)
+        cp build/ReaSpeech-5.4.luac build/ReaSpeech-5.3.luac
+        echo "✓ Copied as ReaSpeech-5.3.luac for compatibility"
 
         cd ../..
 
