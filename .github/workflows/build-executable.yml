@@ -365,45 +365,43 @@ jobs:
         chmod +x package/ffmpeg
 
         # Create README
-        cat > package/ReaSpeech-Readme.txt << 'EOF'
-# ReaSpeech macOS Package
-
-## Installation
-
-1. Extract this package directly to your REAPER Scripts directory:
-   ~/Library/Application Support/REAPER/Scripts/
-
-   After extraction, you should have:
-   - ReaSpeech.lua (the main script)
-   - resources/ (UI resources)
-   - parakeet-transcribe-macos (transcription engine)
-   - ffmpeg (audio processing)
-
-2. In REAPER, go to Actions > Show action list > ReaScript > Load...
-   and load ReaSpeech.lua
-
-## First Run - Security Note
-
-On first run, macOS Gatekeeper may block the executable.
-
-FIX: Allow in System Settings
-- When blocked, go to System Settings > Privacy & Security
-- Click "Open Anyway" for each blocked executable
-
-## Usage
-
-After loading the script in REAPER, access ReaSpeech from the Actions menu.
-The parakeet-transcribe executable will be called automatically.
-
-## Requirements
-
-- REAPER 6.0 or later with ReaImGui extension (v0.9+)
-- macOS 10.15 (Catalina) or later
-
-## Note
-
-Works with both REAPER 6.x (Lua 5.3) and REAPER 7.x (Lua 5.4).
-EOF
+        echo "# ReaSpeech macOS Package" > package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "## Installation" >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "1. Extract this package directly to your REAPER Scripts directory:" >> package/ReaSpeech-Readme.txt
+        echo "   ~/Library/Application Support/REAPER/Scripts/" >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "   After extraction, you should have:" >> package/ReaSpeech-Readme.txt
+        echo "   - ReaSpeech.lua (the main script)" >> package/ReaSpeech-Readme.txt
+        echo "   - resources/ (UI resources)" >> package/ReaSpeech-Readme.txt
+        echo "   - parakeet-transcribe-macos (transcription engine)" >> package/ReaSpeech-Readme.txt
+        echo "   - ffmpeg (audio processing)" >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "2. In REAPER, go to Actions > Show action list > ReaScript > Load..." >> package/ReaSpeech-Readme.txt
+        echo "   and load ReaSpeech.lua" >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "## First Run - Security Note" >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "On first run, macOS Gatekeeper may block the executable." >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "FIX: Allow in System Settings" >> package/ReaSpeech-Readme.txt
+        echo "- When blocked, go to System Settings > Privacy & Security" >> package/ReaSpeech-Readme.txt
+        echo "- Click \"Open Anyway\" for each blocked executable" >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "## Usage" >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "After loading the script in REAPER, access ReaSpeech from the Actions menu." >> package/ReaSpeech-Readme.txt
+        echo "The parakeet-transcribe executable will be called automatically." >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "## Requirements" >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "- REAPER 6.0 or later with ReaImGui extension (v0.9+)" >> package/ReaSpeech-Readme.txt
+        echo "- macOS 10.15 (Catalina) or later" >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "## Note" >> package/ReaSpeech-Readme.txt
+        echo "" >> package/ReaSpeech-Readme.txt
+        echo "Works with both REAPER 6.x (Lua 5.3) and REAPER 7.x (Lua 5.4)." >> package/ReaSpeech-Readme.txt
 
         echo "✓ Package created"
         ls -lh package/
