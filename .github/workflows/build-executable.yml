@@ -132,19 +132,16 @@ jobs:
 
         # Add Script global configuration and save as ReaSpeech.lua
         # (REAPER loads .lua files, not .luac bytecode)
-        $scriptHeader = @'
--- ReaSpeech production configuration
-Script = {
-  name = "ReaSpeech",
-  executable_path = nil,
-  env = "production",
-  lua = _VERSION:match('[%d.]+'),
-  timeout = 30000,
-}
-
-'@
-        $bundleText = Get-Content "build/ReaSpeechBundle.lua" -Raw
-        $scriptHeader + $bundleText | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- ReaSpeech production configuration" | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "Script = {" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        '  name = "ReaSpeech",' | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "  executable_path = nil," | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        '  env = "production",' | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "  lua = _VERSION:match('[%d.]+')," | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "  timeout = 30000," | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "}" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        Get-Content "build/ReaSpeechBundle.lua" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
 
         Write-Host "✓ Built ReaSpeech.lua"
 
