@@ -182,8 +182,8 @@ jobs:
            - parakeet-transcribe-windows.exe (transcription engine)
            - ffmpeg.exe (audio processing)
 
-        2. In REAPER, go to Actions > Show action list > ReaScript > Load...
-           and load ReaSpeech.lua
+        2. In REAPER, go to Actions > Show action list > New Action... > Load ReaScript
+           and load ReaSpeech.lua from that scripts folder.
 
         ## Usage
 
@@ -378,8 +378,8 @@ jobs:
         echo "   - parakeet-transcribe-macos (transcription engine)" >> package/ReaSpeech-Readme.txt
         echo "   - ffmpeg (audio processing)" >> package/ReaSpeech-Readme.txt
         echo "" >> package/ReaSpeech-Readme.txt
-        echo "2. In REAPER, go to Actions > Show action list > ReaScript > Load..." >> package/ReaSpeech-Readme.txt
-        echo "   and load ReaSpeech.lua" >> package/ReaSpeech-Readme.txt
+        echo "2. In REAPER, go to Actions > Show action list > New Action... > Load ReaScript" >> package/ReaSpeech-Readme.txt
+        echo "   and load ReaSpeech.lua from that scripts folder." >> package/ReaSpeech-Readme.txt
         echo "" >> package/ReaSpeech-Readme.txt
         echo "## First Run - Security Note" >> package/ReaSpeech-Readme.txt
         echo "" >> package/ReaSpeech-Readme.txt
