@@ -321,19 +321,15 @@ jobs:
 
         # Add Script global configuration and save as ReaSpeech.lua
         # (REAPER loads .lua files, not .luac bytecode)
-        cat > build/ReaSpeech.lua << 'SCRIPT_HEADER'
--- ReaSpeech production configuration
-Script = {
-  name = "ReaSpeech",
-  executable_path = nil,
-  env = "production",
-  lua = _VERSION:match('[%d.]+'),
-  timeout = 30000,
-}
-
-SCRIPT_HEADER
-
-        # Append the bundle content
+        echo "-- ReaSpeech production configuration" > build/ReaSpeech.lua
+        echo "Script = {" >> build/ReaSpeech.lua
+        echo '  name = "ReaSpeech",' >> build/ReaSpeech.lua
+        echo "  executable_path = nil," >> build/ReaSpeech.lua
+        echo '  env = "production",' >> build/ReaSpeech.lua
+        echo "  lua = _VERSION:match('[%d.]+')," >> build/ReaSpeech.lua
+        echo "  timeout = 30000," >> build/ReaSpeech.lua
+        echo "}" >> build/ReaSpeech.lua
+        echo "" >> build/ReaSpeech.lua
         cat build/ReaSpeechBundle.lua >> build/ReaSpeech.lua
 
         echo "✓ Built ReaSpeech.lua"
