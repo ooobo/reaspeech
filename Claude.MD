@@ -84,3 +84,47 @@ Added `build-macos` job to `.github/workflows/build-executable.yml`:
 
 ### Files Modified
 - `.github/workflows/build-executable.yml` - Added macOS build job
+
+---
+
+## Update: Add Deployment Packages
+**Date:** 2025-12-10
+
+### Task
+Create complete deployment packages bundling ReaSpeech Lua scripts, parakeet-transcribe executable, and FFmpeg for easy installation.
+
+### Implementation
+Enhanced both Windows and macOS build jobs to create deployment packages:
+
+**Package Contents:**
+- `ReaSpeech/` - Complete Lua script installation (excluding tests/build artifacts)
+- `parakeet-transcribe/` - Transcription engine folder containing:
+  - Platform-specific parakeet-transcribe executable
+  - FFmpeg binary for audio processing
+- `README.txt` - Installation and usage instructions
+
+**Windows Package:**
+- Downloads FFmpeg from https://www.gyan.dev/ffmpeg/builds/
+- Uses PowerShell for packaging
+- Creates `reaspeech-windows-package.zip`
+- Installation path: `C:\Users\<Name>\AppData\Roaming\REAPER\Scripts\`
+
+**macOS Package:**
+- Downloads FFmpeg from https://evermeet.cx/ffmpeg/
+- Uses rsync and zip for packaging
+- Creates `reaspeech-macos-package.zip`
+- Installation path: `~/Library/Application Support/REAPER/Scripts/`
+- Includes quarantine removal instructions for macOS Gatekeeper
+
+**Artifacts Available:**
+1. Individual executables (for developers):
+   - `parakeet-transcribe-windows` (Windows .exe)
+   - `parakeet-transcribe-macos` (macOS binary)
+2. Complete packages (for users):
+   - `reaspeech-windows-package` (zip)
+   - `reaspeech-macos-package` (zip)
+
+All artifacts retained for 90 days.
+
+### Files Modified
+- `.github/workflows/build-executable.yml` - Added FFmpeg download and package creation steps

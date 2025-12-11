@@ -70,6 +70,76 @@ jobs:
         # Just check if it runs without error on --help
         dist/parakeet-transcribe-windows.exe --help
 
+    - name: Download FFmpeg for Windows
+      run: |
+        # Download FFmpeg from gyan.dev (essentials build)
+        $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+        Invoke-WebRequest -Uri $ffmpegUrl -OutFile ffmpeg.zip
+        Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg-temp
+
+        # Find and copy ffmpeg.exe (it's in bin subdirectory)
+        $ffmpegExe = Get-ChildItem -Path ffmpeg-temp -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+        if ($ffmpegExe) {
+          Copy-Item $ffmpegExe.FullName -Destination python/dist/
+          Write-Host "✓ FFmpeg copied to dist folder"
+        } else {
+          Write-Error "✗ FFmpeg executable not found in download!"
+          exit 1
+        }
+
+    - name: Create deployment package
+      run: |
+        # Create package directory structure
+        New-Item -ItemType Directory -Path package/ReaSpeech -Force
+        New-Item -ItemType Directory -Path package/parakeet-transcribe -Force
+
+        # Copy ReaSpeech scripts (exclude tests and build artifacts)
+        Copy-Item -Path reascripts/ReaSpeech/* -Destination package/ReaSpeech/ -Recurse -Exclude @('tests', 'build', '*.pyc', '__pycache__')
+
+        # Copy executables to parakeet-transcribe folder
+        Copy-Item -Path python/dist/parakeet-transcribe-windows.exe -Destination package/parakeet-transcribe/
+        Copy-Item -Path python/dist/ffmpeg.exe -Destination package/parakeet-transcribe/
+
+        # Create README
+        @"
+        # ReaSpeech Windows Package
+
+        ## Installation
+
+        1. Copy the 'ReaSpeech' folder to your REAPER Scripts directory:
+           - Windows: C:\Users\<YourName>\AppData\Roaming\REAPER\Scripts\
+
+        2. The parakeet-transcribe folder contains the transcription engine:
+           - parakeet-transcribe-windows.exe - Main transcription executable
+           - ffmpeg.exe - Audio processing (required)
+
+        3. In REAPER, go to Actions > Show action list > ReaScript > Load...
+           and load ReaSpeech/ReaSpeechDev.lua
+
+        ## Usage
+
+        The parakeet-transcribe executable will be called automatically by ReaSpeech.
+        Make sure both files stay in the same folder.
+
+        ## Requirements
+
+        - REAPER with ReaImGui extension
+        - Windows 10 or later
+        "@ | Out-File -FilePath package/README.txt -Encoding UTF8
+
+        # Create zip package
+        Compress-Archive -Path package/* -DestinationPath reaspeech-windows-package.zip -Force
+
+        Write-Host "✓ Package created: reaspeech-windows-package.zip"
+        Get-Item reaspeech-windows-package.zip | Select-Object Name, @{Name="Size (MB)";Expression={[math]::Round($_.Length / 1MB, 2)}}
+
+    - name: Upload deployment package
+      uses: actions/upload-artifact@v4
+      with:
+        name: reaspeech-windows-package
+        path: reaspeech-windows-package.zip
+        retention-days: 90
+
   build-macos:
     runs-on: macos-latest
 
@@ -124,3 +194,89 @@ jobs:
         # Just check if it runs without error on --help
         chmod +x dist/parakeet-transcribe-macos
         dist/parakeet-transcribe-macos --help
+
+    - name: Download FFmpeg for macOS
+      run: |
+        # Download FFmpeg from evermeet.cx
+        curl -L -o ffmpeg.7z https://evermeet.cx/ffmpeg/ffmpeg-7.1.7z
+
+        # Install 7z if not available
+        brew install p7zip
+
+        # Extract ffmpeg
+        7z x ffmpeg.7z -o./
+
+        # Move to dist folder
+        chmod +x ffmpeg
+        mv ffmpeg python/dist/
+
+        echo "✓ FFmpeg downloaded and prepared"
+        ls -lh python/dist/ffmpeg
+
+    - name: Create deployment package
+      run: |
+        # Create package directory structure
+        mkdir -p package/ReaSpeech
+        mkdir -p package/parakeet-transcribe
+
+        # Copy ReaSpeech scripts (exclude tests and build artifacts)
+        rsync -av --exclude='tests' --exclude='build' --exclude='*.pyc' --exclude='__pycache__' \
+          reascripts/ReaSpeech/ package/ReaSpeech/
+
+        # Copy executables to parakeet-transcribe folder
+        cp python/dist/parakeet-transcribe-macos package/parakeet-transcribe/
+        cp python/dist/ffmpeg package/parakeet-transcribe/
+
+        # Make executables executable
+        chmod +x package/parakeet-transcribe/parakeet-transcribe-macos
+        chmod +x package/parakeet-transcribe/ffmpeg
+
+        # Create README
+        cat > package/README.txt << 'EOF'
+        # ReaSpeech macOS Package
+
+        ## Installation
+
+        1. Copy the 'ReaSpeech' folder to your REAPER Scripts directory:
+           - macOS: ~/Library/Application Support/REAPER/Scripts/
+
+        2. The parakeet-transcribe folder contains the transcription engine:
+           - parakeet-transcribe-macos - Main transcription executable
+           - ffmpeg - Audio processing (required)
+
+        3. In REAPER, go to Actions > Show action list > ReaScript > Load...
+           and load ReaSpeech/ReaSpeechDev.lua
+
+        ## First Run
+
+        On first run, you may need to allow the executables in System Preferences > Security & Privacy
+        if macOS blocks them. Alternatively, run these commands in Terminal:
+
+           xattr -d com.apple.quarantine ~/path/to/parakeet-transcribe/parakeet-transcribe-macos
+           xattr -d com.apple.quarantine ~/path/to/parakeet-transcribe/ffmpeg
+
+        ## Usage
+
+        The parakeet-transcribe executable will be called automatically by ReaSpeech.
+        Make sure both files stay in the same folder.
+
+        ## Requirements
+
+        - REAPER with ReaImGui extension
+        - macOS 10.15 (Catalina) or later
+        EOF
+
+        # Create zip package
+        cd package
+        zip -r ../reaspeech-macos-package.zip *
+        cd ..
+
+        echo "✓ Package created: reaspeech-macos-package.zip"
+        ls -lh reaspeech-macos-package.zip
+
+    - name: Upload deployment package
+      uses: actions/upload-artifact@v4
+      with:
+        name: reaspeech-macos-package
+        path: reaspeech-macos-package.zip
+        retention-days: 90
