@@ -174,9 +174,9 @@ jobs:
         ## Installation
 
         1. Extract this package directly to your REAPER Scripts directory:
-           C:\Users\<YourName>\AppData\Roaming\REAPER\Scripts\
+           %AppData%\Roaming\REAPER\Scripts\Reaspeech
 
-           After extraction, you should have:
+           After extraction, you should have in that ReaSpeech folder:
            - ReaSpeech.lua (the main script)
            - resources/ (UI resources)
            - parakeet-transcribe-windows.exe (transcription engine)
@@ -366,49 +366,44 @@ jobs:
 
         # Create README
         cat > package/ReaSpeech-Readme.txt << 'EOF'
-        # ReaSpeech macOS Package
+# ReaSpeech macOS Package
 
-        ## Installation
+## Installation
 
-        1. Extract this package directly to your REAPER Scripts directory:
-           ~/Library/Application Support/REAPER/Scripts/
+1. Extract this package directly to your REAPER Scripts directory:
+   ~/Library/Application Support/REAPER/Scripts/
 
-           After extraction, you should have:
-           - ReaSpeech.lua (the main script)
-           - resources/ (UI resources)
-           - parakeet-transcribe-macos (transcription engine)
-           - ffmpeg (audio processing)
+   After extraction, you should have:
+   - ReaSpeech.lua (the main script)
+   - resources/ (UI resources)
+   - parakeet-transcribe-macos (transcription engine)
+   - ffmpeg (audio processing)
 
-        2. In REAPER, go to Actions > Show action list > ReaScript > Load...
-           and load ReaSpeech.lua
+2. In REAPER, go to Actions > Show action list > ReaScript > Load...
+   and load ReaSpeech.lua
 
-        ## First Run - Security Note
+## First Run - Security Note
 
-        On first run, macOS Gatekeeper may block the executables. You have two options:
+On first run, macOS Gatekeeper may block the executable.
 
-        Option 1: Allow in System Settings
-        - When blocked, go to System Settings > Privacy & Security
-        - Click "Open Anyway" for each blocked executable
+FIX: Allow in System Settings
+- When blocked, go to System Settings > Privacy & Security
+- Click "Open Anyway" for each blocked executable
 
-        Option 2: Remove quarantine attribute (run these commands in Terminal):
-           cd ~/Library/Application\ Support/REAPER/Scripts/
-           xattr -d com.apple.quarantine parakeet-transcribe-macos
-           xattr -d com.apple.quarantine ffmpeg
+## Usage
 
-        ## Usage
+After loading the script in REAPER, access ReaSpeech from the Actions menu.
+The parakeet-transcribe executable will be called automatically.
 
-        After loading the script in REAPER, access ReaSpeech from the Actions menu.
-        The parakeet-transcribe executable will be called automatically.
+## Requirements
 
-        ## Requirements
+- REAPER 6.0 or later with ReaImGui extension (v0.9+)
+- macOS 10.15 (Catalina) or later
 
-        - REAPER 6.0 or later with ReaImGui extension (v0.9+)
-        - macOS 10.15 (Catalina) or later
+## Note
 
-        ## Note
-
-        Works with both REAPER 6.x (Lua 5.3) and REAPER 7.x (Lua 5.4).
-        EOF
+Works with both REAPER 6.x (Lua 5.3) and REAPER 7.x (Lua 5.4).
+EOF
 
         echo "✓ Package created"
         ls -lh package/
