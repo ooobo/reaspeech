@@ -198,22 +198,18 @@ Build compiled `.luac` bytecode files for both Lua 5.3 and 5.4:
 
 **Package Structure (Updated):**
 ```
-Scripts/
-  ReaSpeech/
-    ReaSpeech-5.3.luac    (for REAPER 6.x)
-    ReaSpeech-5.4.luac    (for REAPER 7.x)
-    resources/            (UI images, etc.)
-parakeet-transcribe/
-  parakeet-transcribe-*   (platform executable)
-  ffmpeg                  (audio processing)
-README.txt
+ReaSpeech.luac              (main script - works with both REAPER 6.x and 7.x)
+resources/                  (UI images, etc.)
+parakeet-transcribe-*       (platform executable: -windows.exe or -macos)
+ffmpeg                      (audio processing: .exe on Windows)
+ReaSpeech-Readme.txt        (installation instructions)
 ```
 
 **User Installation:**
-1. Extract package to REAPER Scripts directory
-2. Load appropriate `.luac` file in REAPER Actions
-   - REAPER 6.x → ReaSpeech-5.3.luac
-   - REAPER 7.x → ReaSpeech-5.4.luac
+1. Extract package directly to REAPER Scripts directory
+   - Windows: `C:\Users\<Name>\AppData\Roaming\REAPER\Scripts\`
+   - macOS: `~/Library/Application Support/REAPER/Scripts/`
+2. In REAPER Actions, load `ReaSpeech.luac`
 3. Ready to use!
 
 **Benefits:**
@@ -226,20 +222,20 @@ README.txt
 **Windows Build Tools:**
 - `choco install lua53` (lua54 package not available)
 - Manual build process (PowerShell script)
-- Lua 5.3 bytecode copied as both versions (backward compatible)
+- Compiles single `ReaSpeech.luac` using Lua 5.3
 
 **macOS Build Tools:**
-- ~~`brew install lua@5.3 lua@5.4`~~ **UPDATED 2025-12-11**: Only `brew install lua@5.4`
+- `brew install lua@5.4` (lua@5.3 deprecated in Homebrew on 2024-12-14)
 - Manual build process (bash script)
 - Detects Homebrew path (Apple Silicon vs Intel)
-- **Note**: lua@5.3 deprecated in Homebrew on 2024-12-14
+- Compiles single `ReaSpeech.luac` using Lua 5.4
 
 **Build Process Changes:**
 - Skipped `make build` to avoid luacheck dependency
 - Manual file concatenation matching Makefile logic
 - Direct luac compilation without linting
-- Windows: Only Lua 5.3 build (5.4 is copy for compatibility)
-- ~~macOS: Both Lua 5.3 and 5.4 builds (true versions)~~ **UPDATED**: Only Lua 5.4 build (5.3 is copy for compatibility)
+- Single `ReaSpeech.luac` file (works with both REAPER 6.x and 7.x)
+- Flat package structure for direct extraction to Scripts directory
 
 ### Files Modified
 - `.github/workflows/build-executable.yml` - Added build steps and updated package structure
@@ -258,13 +254,13 @@ lua@5.3 has been disabled because it is deprecated upstream! It was disabled on 
 Homebrew deprecated the lua@5.3 package, making it unavailable for installation.
 
 ### Solution
-Changed macOS build to mirror Windows approach - use only one Lua version and copy bytecode for compatibility:
+Changed macOS build to use only Lua 5.4:
 
 **Changes to `.github/workflows/build-executable.yml`:**
 - Changed from `brew install lua@5.3 lua@5.4` to only `brew install lua@5.4`
 - Updated path detection to find luac5.4 (supports Intel and Apple Silicon Macs)
-- Compile bundle with luac5.4 to create ReaSpeech-5.4.luac
-- Copy ReaSpeech-5.4.luac as ReaSpeech-5.3.luac for compatibility
+- Compile bundle with luac5.4 to create single `ReaSpeech.luac`
+- Simplified package structure (flat, no version-specific files)
 
 **Backward Compatibility:**
 Lua 5.4 bytecode is compatible with Lua 5.3 runtime in most cases. Both REAPER 6.x (Lua 5.3) and REAPER 7.x (Lua 5.4) can run the compiled bytecode.
@@ -280,3 +276,46 @@ fi
 
 ### Files Modified
 - `.github/workflows/build-executable.yml` - Updated macOS Lua installation and compilation
+
+---
+
+## Update: Simplify Package Structure
+**Date:** 2025-12-11
+
+### Changes
+Simplified deployment package structure for easier installation:
+
+**Old Structure:**
+```
+Scripts/
+  ReaSpeech/
+    ReaSpeech-5.3.luac
+    ReaSpeech-5.4.luac
+    resources/
+parakeet-transcribe/
+  parakeet-transcribe-*
+  ffmpeg
+```
+
+**New Structure:**
+```
+ReaSpeech.luac              (single file, works with both REAPER 6.x and 7.x)
+resources/
+parakeet-transcribe-*       (windows.exe or macos)
+ffmpeg                      (.exe on Windows)
+ReaSpeech-Readme.txt
+```
+
+**Benefits:**
+- ✅ Flat structure - extract directly to Scripts directory
+- ✅ No nested folders to navigate
+- ✅ Single .luac file instead of version-specific files
+- ✅ Simpler installation instructions
+- ✅ Renamed README.txt to ReaSpeech-Readme.txt for clarity
+
+**Installation:**
+Users extract the zip directly to their REAPER Scripts directory and load `ReaSpeech.luac` - that's it!
+
+### Files Modified
+- `.github/workflows/build-executable.yml` - Updated package structure for both Windows and macOS
+- `Claude.MD` - Updated documentation

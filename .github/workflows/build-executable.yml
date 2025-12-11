@@ -152,35 +152,29 @@ jobs:
         Write-Host "Created bundle: build/ReaSpeechBundle.lua"
 
         # Compile with luac53
-        & $luac53Path.FullName -o "build/ReaSpeech-5.3.luac" -s "build/ReaSpeechBundle.lua"
+        & $luac53Path.FullName -o "build/ReaSpeech.luac" -s "build/ReaSpeechBundle.lua"
 
-        if (-not (Test-Path "build/ReaSpeech-5.3.luac")) {
-          Write-Error "Failed to create ReaSpeech-5.3.luac"
+        if (-not (Test-Path "build/ReaSpeech.luac")) {
+          Write-Error "Failed to create ReaSpeech.luac"
           exit 1
         }
 
-        Write-Host "✓ Built ReaSpeech-5.3.luac"
-
-        # For Windows, we'll only build 5.3 version since lua54 package doesn't exist
-        # Users with REAPER 7 can still use the 5.3 version (Lua 5.4 is backward compatible)
-        Copy-Item "build/ReaSpeech-5.3.luac" "build/ReaSpeech-5.4.luac"
+        Write-Host "✓ Built ReaSpeech.luac"
 
         cd ../..
 
-        # Create package directory structure
-        New-Item -ItemType Directory -Path package/Scripts/ReaSpeech -Force
-        New-Item -ItemType Directory -Path package/parakeet-transcribe -Force
+        # Create package directory (flat structure for direct extraction to Scripts/)
+        New-Item -ItemType Directory -Path package -Force
 
-        # Copy built ReaSpeech files (compiled .luac versions)
-        Copy-Item -Path reascripts/ReaSpeech/build/ReaSpeech-5.3.luac -Destination package/Scripts/ReaSpeech/
-        Copy-Item -Path reascripts/ReaSpeech/build/ReaSpeech-5.4.luac -Destination package/Scripts/ReaSpeech/
+        # Copy ReaSpeech.luac to package root
+        Copy-Item -Path reascripts/ReaSpeech/build/ReaSpeech.luac -Destination package/
 
-        # Copy resources folder (images, etc.)
-        Copy-Item -Path reascripts/ReaSpeech/resources -Destination package/Scripts/ReaSpeech/ -Recurse
+        # Copy resources folder
+        Copy-Item -Path reascripts/ReaSpeech/resources -Destination package/ -Recurse
 
-        # Copy executables to parakeet-transcribe folder
-        Copy-Item -Path python/dist/parakeet-transcribe-windows.exe -Destination package/parakeet-transcribe/
-        Copy-Item -Path python/dist/ffmpeg.exe -Destination package/parakeet-transcribe/
+        # Copy executables to package root
+        Copy-Item -Path python/dist/parakeet-transcribe-windows.exe -Destination package/
+        Copy-Item -Path python/dist/ffmpeg.exe -Destination package/
 
         # Create README
         @"
@@ -188,22 +182,17 @@ jobs:
 
         ## Installation
 
-        1. Extract this package to your REAPER Scripts directory:
+        1. Extract this package directly to your REAPER Scripts directory:
            C:\Users\<YourName>\AppData\Roaming\REAPER\Scripts\
 
            After extraction, you should have:
-           - Scripts/ReaSpeech/ReaSpeech-5.3.luac
-           - Scripts/ReaSpeech/ReaSpeech-5.4.luac (same as 5.3, for compatibility)
-           - Scripts/ReaSpeech/resources/ (UI resources)
-           - parakeet-transcribe/ (transcription engine)
+           - ReaSpeech.luac (the main script)
+           - resources/ (UI resources)
+           - parakeet-transcribe-windows.exe (transcription engine)
+           - ffmpeg.exe (audio processing)
 
         2. In REAPER, go to Actions > Show action list > ReaScript > Load...
-           and load the ReaSpeech .luac file:
-           - Both REAPER 6.x and 7.x: Use either ReaSpeech-5.3.luac or ReaSpeech-5.4.luac
-             (They are identical on Windows - Lua 5.3 bytecode works on both versions)
-
-        3. The parakeet-transcribe folder contains the transcription engine.
-           Keep this folder structure intact - ReaSpeech will find it automatically.
+           and load ReaSpeech.luac
 
         ## Usage
 
@@ -214,7 +203,11 @@ jobs:
 
         - REAPER 6.0 or later with ReaImGui extension (v0.9+)
         - Windows 10 or later
-        "@ | Out-File -FilePath package/README.txt -Encoding UTF8
+
+        ## Note
+
+        Works with both REAPER 6.x (Lua 5.3) and REAPER 7.x (Lua 5.4).
+        "@ | Out-File -FilePath package/ReaSpeech-Readme.txt -Encoding UTF8
 
         # Create zip package
         Compress-Archive -Path package/* -DestinationPath reaspeech-windows-package.zip -Force
@@ -364,56 +357,45 @@ jobs:
         echo "✓ Created bundle: build/ReaSpeechBundle.lua"
 
         # Compile for Lua 5.4
-        "$LUAC54_PATH" -o build/ReaSpeech-5.4.luac -s build/ReaSpeechBundle.lua
-        echo "✓ Built ReaSpeech-5.4.luac"
-
-        # Copy as 5.3 version for compatibility (Lua 5.4 bytecode works on both REAPER versions)
-        cp build/ReaSpeech-5.4.luac build/ReaSpeech-5.3.luac
-        echo "✓ Copied as ReaSpeech-5.3.luac for compatibility"
+        "$LUAC54_PATH" -o build/ReaSpeech.luac -s build/ReaSpeechBundle.lua
+        echo "✓ Built ReaSpeech.luac"
 
         cd ../..
 
-        # Create package directory structure
-        mkdir -p package/Scripts/ReaSpeech
-        mkdir -p package/parakeet-transcribe
+        # Create package directory (flat structure for direct extraction to Scripts/)
+        mkdir -p package
 
-        # Copy built ReaSpeech files (compiled .luac versions)
-        cp reascripts/ReaSpeech/build/ReaSpeech-5.3.luac package/Scripts/ReaSpeech/
-        cp reascripts/ReaSpeech/build/ReaSpeech-5.4.luac package/Scripts/ReaSpeech/
+        # Copy ReaSpeech.luac to package root
+        cp reascripts/ReaSpeech/build/ReaSpeech.luac package/
 
-        # Copy resources folder (images, etc.)
-        cp -r reascripts/ReaSpeech/resources package/Scripts/ReaSpeech/
+        # Copy resources folder
+        cp -r reascripts/ReaSpeech/resources package/
 
-        # Copy executables to parakeet-transcribe folder
-        cp python/dist/parakeet-transcribe-macos package/parakeet-transcribe/
-        cp python/dist/ffmpeg package/parakeet-transcribe/
+        # Copy executables to package root
+        cp python/dist/parakeet-transcribe-macos package/
+        cp python/dist/ffmpeg package/
 
         # Make executables executable
-        chmod +x package/parakeet-transcribe/parakeet-transcribe-macos
-        chmod +x package/parakeet-transcribe/ffmpeg
+        chmod +x package/parakeet-transcribe-macos
+        chmod +x package/ffmpeg
 
         # Create README
-        cat > package/README.txt << 'EOF'
+        cat > package/ReaSpeech-Readme.txt << 'EOF'
         # ReaSpeech macOS Package
 
         ## Installation
 
-        1. Extract this package to your REAPER Scripts directory:
+        1. Extract this package directly to your REAPER Scripts directory:
            ~/Library/Application Support/REAPER/Scripts/
 
            After extraction, you should have:
-           - Scripts/ReaSpeech/ReaSpeech-5.3.luac (for REAPER with Lua 5.3)
-           - Scripts/ReaSpeech/ReaSpeech-5.4.luac (for REAPER with Lua 5.4)
-           - Scripts/ReaSpeech/resources/ (UI resources)
-           - parakeet-transcribe/ (transcription engine)
+           - ReaSpeech.luac (the main script)
+           - resources/ (UI resources)
+           - parakeet-transcribe-macos (transcription engine)
+           - ffmpeg (audio processing)
 
         2. In REAPER, go to Actions > Show action list > ReaScript > Load...
-           and load the appropriate ReaSpeech .luac file for your REAPER version:
-           - REAPER 6.x: Use ReaSpeech-5.3.luac
-           - REAPER 7.x: Use ReaSpeech-5.4.luac
-
-        3. The parakeet-transcribe folder contains the transcription engine.
-           Keep this folder structure intact - ReaSpeech will find it automatically.
+           and load ReaSpeech.luac
 
         ## First Run - Security Note
 
@@ -425,8 +407,8 @@ jobs:
 
         Option 2: Remove quarantine attribute (run these commands in Terminal):
            cd ~/Library/Application\ Support/REAPER/Scripts/
-           xattr -d com.apple.quarantine parakeet-transcribe/parakeet-transcribe-macos
-           xattr -d com.apple.quarantine parakeet-transcribe/ffmpeg
+           xattr -d com.apple.quarantine parakeet-transcribe-macos
+           xattr -d com.apple.quarantine ffmpeg
 
         ## Usage
 
@@ -437,6 +419,10 @@ jobs:
 
         - REAPER 6.0 or later with ReaImGui extension (v0.9+)
         - macOS 10.15 (Catalina) or later
+
+        ## Note
+
+        Works with both REAPER 6.x (Lua 5.3) and REAPER 7.x (Lua 5.4).
         EOF
 
         # Create zip package
