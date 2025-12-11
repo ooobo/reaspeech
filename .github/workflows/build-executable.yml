@@ -316,24 +316,18 @@ jobs:
         cd reascripts/ReaSpeech
 
         # Install Lua 5.4 for building (5.3 deprecated in Homebrew as of 2024-12-14)
-        brew install lua@5.4
+        # Note: Homebrew installs this as 'lua' package (currently 5.4.8)
+        brew install lua
 
-        # Find luac compiler (Homebrew paths differ on Intel vs Apple Silicon)
-        if [ -d "/opt/homebrew/opt" ]; then
-          # Apple Silicon
-          LUAC54_PATH="/opt/homebrew/opt/lua@5.4/bin/luac5.4"
-        else
-          # Intel Mac
-          LUAC54_PATH="/usr/local/opt/lua@5.4/bin/luac5.4"
-        fi
-
-        # Verify compiler exists
-        if [ ! -f "$LUAC54_PATH" ]; then
-          echo "Error: Could not find luac5.4 at $LUAC54_PATH"
+        # Find luac compiler
+        LUAC_PATH=$(which luac)
+        if [ -z "$LUAC_PATH" ]; then
+          echo "Error: Could not find luac in PATH"
           exit 1
         fi
 
-        echo "Using luac5.4: $LUAC54_PATH"
+        echo "Using luac: $LUAC_PATH"
+        luac -v
 
         # Build the bundle manually (matching Makefile logic but skip luacheck)
         mkdir -p build
@@ -346,9 +340,8 @@ jobs:
           vendor/url.lua \
           resources/images/*.lua \
           source/libs/*.lua \
-          source/libs/*/*.lua \
           source/ui/*.lua \
-          source/ui/*/*.lua \
+          source/ui/widgets/*.lua \
           source/main/*.lua \
           version.lua \
           source/include/main.lua \
@@ -357,7 +350,7 @@ jobs:
         echo "✓ Created bundle: build/ReaSpeechBundle.lua"
 
         # Compile for Lua 5.4
-        "$LUAC54_PATH" -o build/ReaSpeech.luac -s build/ReaSpeechBundle.lua
+        "$LUAC_PATH" -o build/ReaSpeech.luac -s build/ReaSpeechBundle.lua
         echo "✓ Built ReaSpeech.luac"
 
         cd ../..

@@ -319,3 +319,37 @@ Users extract the zip directly to their REAPER Scripts directory and load `ReaSp
 ### Files Modified
 - `.github/workflows/build-executable.yml` - Updated package structure for both Windows and macOS
 - `Claude.MD` - Updated documentation
+
+---
+
+## Update: Fix macOS Build Path Issues
+**Date:** 2025-12-11
+
+### Problem
+macOS build failing with two issues:
+1. `lua@5.4` package doesn't exist - Homebrew installs as `lua` (version 5.4.8)
+2. `cat: source/libs/*/*.lua: No such file or directory` - glob pattern failing because no subdirectories exist in libs/ and main/
+
+### Solution
+Updated macOS build script:
+
+**Lua Installation:**
+- Changed from `brew install lua@5.4` to `brew install lua`
+- Use `which luac` to find compiler in PATH (simpler and more reliable)
+- No need for complex path detection for Apple Silicon vs Intel
+
+**File Concatenation:**
+- Removed glob patterns for non-existent subdirectories: `source/libs/*/*.lua` and `source/main/*/*.lua`
+- Only include actual subdirectory: `source/ui/widgets/*.lua`
+- Prevents `cat` from failing on non-matching patterns
+
+**Actual Directory Structure:**
+```
+source/libs/*.lua           (files only, no subdirectories)
+source/ui/*.lua             (files)
+source/ui/widgets/*.lua     (subdirectory with files)
+source/main/*.lua           (files only, no subdirectories)
+```
+
+### Files Modified
+- `.github/workflows/build-executable.yml` - Fixed Lua installation and file concatenation
