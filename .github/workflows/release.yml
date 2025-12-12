@@ -191,34 +191,46 @@ jobs:
         name: macos-release-files
         path: macos-files
 
+    - name: Debug - List artifact contents
+      run: |
+        echo "=== Windows files ==="
+        find windows-files -type f -o -type d
+        echo ""
+        echo "=== macOS files ==="
+        find macos-files -type f -o -type d
+
     - name: Prepare release assets
       run: |
         mkdir -p release-assets
 
-        # Artifacts preserve directory structure
-        # Main script (from Windows build, same for all platforms)
-        cp windows-files/reascripts/ReaSpeech/build/ReaSpeech.lua release-assets/
+        # Find and copy files (handles both preserved and flattened paths)
+
+        # Main script (from Windows build)
+        find windows-files -name "ReaSpeech.lua" -type f -exec cp {} release-assets/ \;
 
         # Windows executables
-        cp windows-files/python/dist/parakeet-transcribe-windows.exe release-assets/
-        cp windows-files/python/dist/ffmpeg.exe release-assets/
+        find windows-files -name "parakeet-transcribe-windows.exe" -type f -exec cp {} release-assets/ \;
+        find windows-files -name "ffmpeg.exe" -type f -exec cp {} release-assets/ \;
 
         # macOS executables
-        cp macos-files/python/dist/parakeet-transcribe-macos release-assets/
-        cp macos-files/python/dist/ffmpeg release-assets/ffmpeg-macos
+        find macos-files -name "parakeet-transcribe-macos" -type f -exec cp {} release-assets/ \;
+        find macos-files -name "ffmpeg" -type f -exec cp {} release-assets/ffmpeg-macos \;
         chmod +x release-assets/parakeet-transcribe-macos
         chmod +x release-assets/ffmpeg-macos
 
-        # Resources (uploaded as directory, preserved structure)
-        cp -r windows-files/reascripts/ReaSpeech/resources release-assets/
+        # Resources (find the resources directory)
+        RESOURCES_DIR=$(find windows-files -type d -name "resources" | head -1)
+        if [ -n "$RESOURCES_DIR" ]; then
+          cp -r "$RESOURCES_DIR" release-assets/
 
-        # Copy individual resource files to release root for ReaPack URLs
-        cp windows-files/reascripts/ReaSpeech/resources/images/icon.lua release-assets/icon.lua
-        cp windows-files/reascripts/ReaSpeech/resources/images/spinner.lua release-assets/spinner.lua
+          # Copy individual resource files to release root for ReaPack URLs
+          cp release-assets/resources/images/icon.lua release-assets/icon.lua
+          cp release-assets/resources/images/spinner.lua release-assets/spinner.lua
+        fi
 
         ls -lah release-assets/
         echo "Resources:"
-        ls -lah release-assets/resources/images/
+        ls -lah release-assets/resources/images/ || echo "No resources/images directory found"
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
