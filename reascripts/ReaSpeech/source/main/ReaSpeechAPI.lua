@@ -54,7 +54,7 @@ function ReaSpeechAPI:find_executable(custom_path)
   local executable_name
   if EnvUtil.is_windows() then
     executable_name = "parakeet-transcribe-windows.exe"
-  elseif reaper.GetOS():match("OSX") then
+  elseif EnvUtil.is_mac() then
     executable_name = "parakeet-transcribe-macos"
   else
     executable_name = "parakeet-transcribe-linux"
