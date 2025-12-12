@@ -2,11 +2,48 @@
 ![Lint & Test](https://github.com/teamaudio/reaspeech/actions/workflows/check-reascripts.yml/badge.svg)
 
 ### Painless speech-to-text transcription inside of REAPER
-ReaSpeech is a ReaScript frontend that will take your project's media items and run them through a Docker-hosted Whisper backend, building a searchable, project-marker based index of the resulting transcription. That's right - not only do you reap (zing!) the benefits of a staff of transcribers, but you get to add "familiar with Docker" to your resume.
+ReaSpeech is a ReaScript that provides speech-to-text transcription using the Parakeet TDT ASR model. It runs locally on your machine with no cloud services required, building a searchable, project-marker based index of the resulting transcription.
 
 ![Screenshot](docs/assets/img/reaspeech-screenshot.png)
 
+# Installation
+
+## Via ReaPack (Recommended)
+
+1. In REAPER, go to **Extensions > ReaPack > Import repositories**
+2. Add this repository URL: `https://github.com/ooobo/reaspeech/raw/main/index.xml`
+3. Go to **Extensions > ReaPack > Browse packages**
+4. Search for "ReaSpeech" and click Install
+5. ReaPack will automatically download the correct files for your platform
+
+## Manual Installation
+
+### Windows
+1. Download the latest `reaspeech-windows-package.zip` from [GitHub Actions](https://github.com/ooobo/reaspeech/actions) or [Releases](https://github.com/ooobo/reaspeech/releases)
+2. Extract to `%AppData%\Roaming\REAPER\Scripts\ReaSpeech`
+3. In REAPER: Actions > Show action list > New Action... > Load ReaScript
+4. Load `ReaSpeech.lua` from that folder
+
+### macOS
+1. Download the latest `reaspeech-macos-package.zip` from [GitHub Actions](https://github.com/ooobo/reaspeech/actions) or [Releases](https://github.com/ooobo/reaspeech/releases)
+2. Extract to `~/Library/Application Support/REAPER/Scripts/ReaSpeech`
+3. In REAPER: Actions > Show action list > New Action... > Load ReaScript
+4. Load `ReaSpeech.lua` from that folder
+5. On first run, allow the executables in System Settings > Privacy & Security
+
 # Quick Usage
+
+* Select media items in REAPER
+* Run ReaSpeech from the Actions menu
+* Choose transcription settings
+* Wait for processing (runs locally, no internet required)
+* View, edit, and export transcripts
+
+---
+
+# Legacy Docker Installation
+
+For the older Docker-based version, see below:
 
 * Install [Docker](https://www.docker.com/)
 * Run the [Docker image](https://hub.docker.com/r/techaudiodoc/reaspeech)

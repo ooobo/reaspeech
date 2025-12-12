@@ -1,50 +1,249 @@
-name: Publish GitHub Release Notes to website repo
+name: Create ReaPack Release
 
 on:
-  release:
-    types: [edited]
-  workflow_dispatch: 
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
     inputs:
-      project_id:
-        description: 'Project ID'
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
         required: true
-        default: 'reaspeech'
-      project_name:
-        description: 'Test project name'
-        required: true
-        default: 'ReaSpeech'
-      project_repository:
-        description: 'GitHub repository where the project is hosted'
-        required: true
-        default: 'reaspeech'
-      release_body:
-        description: 'Release body content'
-        required: true
-        default: 'Release body for Reaspeech'
+        default: 'v1.0.0'
 
 jobs:
-  publish-release-notes:
-    runs-on: ubuntu-latest
-    # if: ${{ github.event.release.prerelease == false }} 
-
+  build-windows:
+    runs-on: windows-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          repository: TeamAudio/techaudio-web
-          ref: main
-          fetch-depth: 0  # Fetch all history for accurate versioning
-          token: ${{ secrets.PUBLISH_RELEASE_SERVICE_TOKEN}}
-          path: techaudio-web
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
 
-      - name: Call publish-release action
-        uses: ./techaudio-web/.github/actions/publish-release
-        with:
-          project_id: reaspeech
-          project_name: ReaSpeech
-          project_repository: ${{ github.repository }}
-          version_tag: ${{ github.event.release.tag_name || 'v0.0.1-test' }}
-          release_body: ${{ github.event.release.body }}
-          service_token: ${{ secrets.PUBLISH_RELEASE_SERVICE_TOKEN }}
-          latest_release_url: ${{ vars.LATEST_RELEASE_URL || 'https://hub.docker.com/r/techaudiodoc/reaspeech' }}
-  
+    - name: Install FFmpeg
+      run: |
+        choco install ffmpeg -y
+        ffmpeg -version
+
+    - name: Install dependencies
+      working-directory: python
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install onnx-asr onnxruntime numpy ffmpeg-python huggingface-hub
+
+    - name: Build executable
+      working-directory: python
+      run: |
+        pyinstaller parakeet_transcribe.spec
+
+    - name: Cache FFmpeg for Windows
+      id: cache-ffmpeg-windows
+      uses: actions/cache@v4
+      with:
+        path: ffmpeg-cache-windows
+        key: ffmpeg-windows-essentials-v1
+
+    - name: Download FFmpeg for Windows
+      if: steps.cache-ffmpeg-windows.outputs.cache-hit != 'true'
+      run: |
+        $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+        Invoke-WebRequest -Uri $ffmpegUrl -OutFile ffmpeg.zip
+        Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg-temp
+        $ffmpegExe = Get-ChildItem -Path ffmpeg-temp -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+        if ($ffmpegExe) {
+          New-Item -ItemType Directory -Path ffmpeg-cache-windows -Force
+          Copy-Item $ffmpegExe.FullName -Destination ffmpeg-cache-windows/ffmpeg.exe
+        }
+
+    - name: Copy FFmpeg from cache
+      run: |
+        Copy-Item -Path ffmpeg-cache-windows/ffmpeg.exe -Destination python/dist/
+
+    - name: Build ReaSpeech bundle
+      run: |
+        cd reascripts/ReaSpeech
+        $bundleContent = @(
+          "source/include/header.lua",
+          "source/include/globals.lua",
+          "vendor/json.lua",
+          "vendor/url.lua"
+        )
+        $bundleContent += Get-ChildItem -Path "resources/images" -Filter "*.lua" | ForEach-Object { $_.FullName }
+        $bundleContent += Get-ChildItem -Path "source/libs" -Filter "*.lua" -Recurse | ForEach-Object { $_.FullName }
+        $bundleContent += Get-ChildItem -Path "source/ui" -Filter "*.lua" -Recurse | ForEach-Object { $_.FullName }
+        $bundleContent += Get-ChildItem -Path "source/main" -Filter "*.lua" -Recurse | ForEach-Object { $_.FullName }
+        $bundleContent += "version.lua"
+        $bundleContent += "source/include/main.lua"
+        New-Item -ItemType Directory -Path build -Force | Out-Null
+        Get-Content $bundleContent | Set-Content -Path "build/ReaSpeechBundle.lua" -Encoding UTF8
+        
+        "-- @description ReaSpeech - Speech recognition for REAPER" | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- @version 1.0.0" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- @author ReaSpeech Contributors" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- @about" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "--   # ReaSpeech" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "--   Speech recognition tool for REAPER using Parakeet ASR" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- ReaSpeech production configuration" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "Script = {" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        '  name = "ReaSpeech",' | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "  executable_path = nil," | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        '  env = "production",' | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "  lua = _VERSION:match('[%d.]+')," | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "  timeout = 30000," | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "}" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        Get-Content "build/ReaSpeechBundle.lua" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-release-files
+        path: |
+          reascripts/ReaSpeech/build/ReaSpeech.lua
+          python/dist/parakeet-transcribe-windows.exe
+          python/dist/ffmpeg.exe
+          reascripts/ReaSpeech/resources/
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install FFmpeg
+      run: |
+        brew install ffmpeg
+        ffmpeg -version
+
+    - name: Install dependencies
+      working-directory: python
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install onnx-asr onnxruntime numpy ffmpeg-python huggingface-hub
+
+    - name: Build executable
+      working-directory: python
+      run: |
+        pyinstaller parakeet_transcribe.spec
+
+    - name: Cache FFmpeg for macOS
+      id: cache-ffmpeg-macos
+      uses: actions/cache@v4
+      with:
+        path: ffmpeg-cache-macos
+        key: ffmpeg-macos-7.1-v1
+
+    - name: Download FFmpeg for macOS
+      if: steps.cache-ffmpeg-macos.outputs.cache-hit != 'true'
+      run: |
+        curl -L -o ffmpeg.7z https://evermeet.cx/ffmpeg/ffmpeg-7.1.7z
+        brew install p7zip
+        7z x ffmpeg.7z
+        mkdir -p ffmpeg-cache-macos
+        mv ffmpeg ffmpeg-cache-macos/
+
+    - name: Copy FFmpeg from cache
+      run: |
+        cp ffmpeg-cache-macos/ffmpeg python/dist/
+        chmod +x python/dist/ffmpeg
+
+    - name: Upload macOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-release-files
+        path: |
+          python/dist/parakeet-transcribe-macos
+          python/dist/ffmpeg
+
+  create-release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-release-files
+        path: windows-files
+
+    - name: Download macOS artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: macos-release-files
+        path: macos-files
+
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets/resources/images
+        
+        # Main script (from Windows build, same for all platforms)
+        cp windows-files/reascripts/ReaSpeech/build/ReaSpeech.lua release-assets/
+        
+        # Windows executables
+        cp windows-files/python/dist/parakeet-transcribe-windows.exe release-assets/
+        cp windows-files/python/dist/ffmpeg.exe release-assets/
+        
+        # macOS executables
+        cp macos-files/python/dist/parakeet-transcribe-macos release-assets/
+        cp macos-files/python/dist/ffmpeg release-assets/ffmpeg-macos
+        chmod +x release-assets/parakeet-transcribe-macos
+        chmod +x release-assets/ffmpeg-macos
+        
+        # Resources
+        cp windows-files/reascripts/ReaSpeech/resources/images/*.lua release-assets/resources/images/
+        
+        ls -lah release-assets/
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        name: ReaSpeech ${{ steps.version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+        body: |
+          # ReaSpeech ${{ steps.version.outputs.VERSION }}
+
+          Speech recognition for REAPER using Parakeet ASR.
+
+          ## Installation
+
+          ### Via ReaPack (Recommended)
+          1. In REAPER, go to Extensions > ReaPack > Import repositories
+          2. Add: `https://github.com/ooobo/reaspeech/raw/main/index.xml`
+          3. Browse packages and install "ReaSpeech"
+          4. ReaPack will download all platform-specific files automatically
+
+          ### Manual Installation
+          Download individual files for your platform from the Assets section below.
+
+          ## What's New
+          - See commits for detailed changes
+        files: |
+          release-assets/ReaSpeech.lua
+          release-assets/parakeet-transcribe-windows.exe
+          release-assets/ffmpeg.exe
+          release-assets/parakeet-transcribe-macos
+          release-assets/ffmpeg-macos
+          release-assets/resources/images/*.lua
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

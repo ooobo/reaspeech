@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<index version="1" name="ReaSpeech" commit="https://github.com/ooobo/reaspeech/commits/main">
+  <category name="Speech Recognition">
+    <reapack name="ReaSpeech.lua" type="script" desc="Speech recognition for REAPER using Parakeet ASR">
+      <metadata>
+        <description><![CDATA[{
+  "description": "ReaSpeech - Speech recognition for REAPER",
+  "screenshot": "",
+  "author": "ReaSpeech Contributors",
+  "about": "# ReaSpeech\n\nSpeech recognition tool for REAPER using Parakeet TDT ASR model.\n\nFeatures:\n- Local processing (no cloud services)\n- Fast transcription with Parakeet ASR\n- Transcript editing and export\n- Word-level timing\n- SRT and CSV export"
+}]]></description>
+      </metadata>
+
+      <version name="1.0.0" author="ReaSpeech Contributors" time="2025-01-12T00:00:00Z">
+        <changelog><![CDATA[Initial ReaPack release
+- Local executable backend with Parakeet ASR
+- Single-file deployment
+- Auto-registration in REAPER actions
+- Platform-specific packages (Windows/macOS)]]></changelog>
+
+        <!-- Main script (cross-platform) -->
+        <source main="main">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/ReaSpeech.lua</source>
+
+        <!-- Windows data files -->
+        <source platform="windows" file="parakeet-transcribe-windows.exe">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/parakeet-transcribe-windows.exe</source>
+        <source platform="windows" file="ffmpeg.exe">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/ffmpeg.exe</source>
+
+        <!-- macOS data files -->
+        <source platform="darwin" file="parakeet-transcribe-macos">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/parakeet-transcribe-macos</source>
+        <source platform="darwin" file="ffmpeg">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/ffmpeg</source>
+
+        <!-- Resources (cross-platform) -->
+        <source file="resources/images/icon.lua">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/resources/images/icon.lua</source>
+        <source file="resources/images/spinner.lua">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/resources/images/spinner.lua</source>
+      </version>
+    </reapack>
+  </category>
+</index>
