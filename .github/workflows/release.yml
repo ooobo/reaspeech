@@ -195,26 +195,26 @@ jobs:
       run: |
         mkdir -p release-assets
 
-        # Artifacts are uploaded with flattened paths, so files are at the root
+        # Artifacts preserve directory structure
         # Main script (from Windows build, same for all platforms)
-        cp windows-files/ReaSpeech.lua release-assets/
+        cp windows-files/reascripts/ReaSpeech/build/ReaSpeech.lua release-assets/
 
         # Windows executables
-        cp windows-files/parakeet-transcribe-windows.exe release-assets/
-        cp windows-files/ffmpeg.exe release-assets/
+        cp windows-files/python/dist/parakeet-transcribe-windows.exe release-assets/
+        cp windows-files/python/dist/ffmpeg.exe release-assets/
 
         # macOS executables
-        cp macos-files/parakeet-transcribe-macos release-assets/
-        cp macos-files/ffmpeg release-assets/ffmpeg-macos
+        cp macos-files/python/dist/parakeet-transcribe-macos release-assets/
+        cp macos-files/python/dist/ffmpeg release-assets/ffmpeg-macos
         chmod +x release-assets/parakeet-transcribe-macos
         chmod +x release-assets/ffmpeg-macos
 
         # Resources (uploaded as directory, preserved structure)
-        cp -r windows-files/resources release-assets/
+        cp -r windows-files/reascripts/ReaSpeech/resources release-assets/
 
         # Copy individual resource files to release root for ReaPack URLs
-        cp windows-files/resources/images/icon.lua release-assets/icon.lua
-        cp windows-files/resources/images/spinner.lua release-assets/spinner.lua
+        cp windows-files/reascripts/ReaSpeech/resources/images/icon.lua release-assets/icon.lua
+        cp windows-files/reascripts/ReaSpeech/resources/images/spinner.lua release-assets/spinner.lua
 
         ls -lah release-assets/
         echo "Resources:"
