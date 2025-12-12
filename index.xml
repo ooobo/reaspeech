@@ -10,7 +10,7 @@
   "about": "# ReaSpeech\n\nSpeech recognition tool for REAPER using Parakeet TDT ASR model.\n\nIssues? Email richardson.ross@abc.net.au"
 }]]></description>
       </metadata>
-      <version name="0.7.1-fork2" author="ooobo" time="2025-01-12T00:00:00Z">
+      <version name="0.7.1-fork2" author="ooobo" time="2025-12-12T00:00:00Z">
         <changelog><![CDATA[Initial ReaPack release]]></changelog>
 
         <!-- Main script (cross-platform) -->
