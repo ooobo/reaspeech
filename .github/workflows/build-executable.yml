@@ -133,7 +133,7 @@ jobs:
         # Add Script global configuration and save as ReaSpeech.lua
         # (REAPER loads .lua files, not .luac bytecode)
         "-- @description ReaSpeech - Speech recognition for REAPER" | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
-        "-- @version 1.0.0" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- @version 0.7.1-fork1" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "-- @author ReaSpeech Contributors" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "-- @about" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "--   # ReaSpeech" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
@@ -326,7 +326,7 @@ jobs:
         # Add Script global configuration and save as ReaSpeech.lua
         # (REAPER loads .lua files, not .luac bytecode)
         echo "-- @description ReaSpeech - Speech recognition for REAPER" > build/ReaSpeech.lua
-        echo "-- @version 1.0.0" >> build/ReaSpeech.lua
+        echo "-- @version 0.7.1-fork1" >> build/ReaSpeech.lua
         echo "-- @author ReaSpeech Contributors" >> build/ReaSpeech.lua
         echo "-- @about" >> build/ReaSpeech.lua
         echo "--   # ReaSpeech" >> build/ReaSpeech.lua

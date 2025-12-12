@@ -81,7 +81,7 @@ jobs:
         Get-Content $bundleContent | Set-Content -Path "build/ReaSpeechBundle.lua" -Encoding UTF8
         
         "-- @description ReaSpeech - Speech recognition for REAPER" | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
-        "-- @version 1.0.0" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- @version 0.7.1-fork1" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "-- @author ReaSpeech Contributors" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "-- @about" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "--   # ReaSpeech" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
@@ -193,25 +193,32 @@ jobs:
 
     - name: Prepare release assets
       run: |
-        mkdir -p release-assets/resources/images
-        
+        mkdir -p release-assets
+
+        # Artifacts are uploaded with flattened paths, so files are at the root
         # Main script (from Windows build, same for all platforms)
-        cp windows-files/reascripts/ReaSpeech/build/ReaSpeech.lua release-assets/
-        
+        cp windows-files/ReaSpeech.lua release-assets/
+
         # Windows executables
-        cp windows-files/python/dist/parakeet-transcribe-windows.exe release-assets/
-        cp windows-files/python/dist/ffmpeg.exe release-assets/
-        
+        cp windows-files/parakeet-transcribe-windows.exe release-assets/
+        cp windows-files/ffmpeg.exe release-assets/
+
         # macOS executables
-        cp macos-files/python/dist/parakeet-transcribe-macos release-assets/
-        cp macos-files/python/dist/ffmpeg release-assets/ffmpeg-macos
+        cp macos-files/parakeet-transcribe-macos release-assets/
+        cp macos-files/ffmpeg release-assets/ffmpeg-macos
         chmod +x release-assets/parakeet-transcribe-macos
         chmod +x release-assets/ffmpeg-macos
-        
-        # Resources
-        cp windows-files/reascripts/ReaSpeech/resources/images/*.lua release-assets/resources/images/
-        
+
+        # Resources (uploaded as directory, preserved structure)
+        cp -r windows-files/resources release-assets/
+
+        # Copy individual resource files to release root for ReaPack URLs
+        cp windows-files/resources/images/icon.lua release-assets/icon.lua
+        cp windows-files/resources/images/spinner.lua release-assets/spinner.lua
+
         ls -lah release-assets/
+        echo "Resources:"
+        ls -lah release-assets/resources/images/
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
@@ -244,6 +251,7 @@ jobs:
           release-assets/ffmpeg.exe
           release-assets/parakeet-transcribe-macos
           release-assets/ffmpeg-macos
-          release-assets/resources/images/*.lua
+          release-assets/icon.lua
+          release-assets/spinner.lua
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

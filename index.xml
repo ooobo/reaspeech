@@ -11,7 +11,7 @@
 }]]></description>
       </metadata>
 
-      <version name="1.0.0" author="ReaSpeech Contributors" time="2025-01-12T00:00:00Z">
+      <version name="0.7.1-fork1" author="ReaSpeech Contributors" time="2025-01-12T00:00:00Z">
         <changelog><![CDATA[Initial ReaPack release
 - Local executable backend with Parakeet ASR
 - Single-file deployment
@@ -19,19 +19,20 @@
 - Platform-specific packages (Windows/macOS)]]></changelog>
 
         <!-- Main script (cross-platform) -->
-        <source main="main">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/ReaSpeech.lua</source>
+        <source main="main">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/ReaSpeech.lua</source>
 
         <!-- Windows data files -->
-        <source platform="windows" file="parakeet-transcribe-windows.exe">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/parakeet-transcribe-windows.exe</source>
-        <source platform="windows" file="ffmpeg.exe">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/ffmpeg.exe</source>
+        <source platform="windows" file="parakeet-transcribe-windows.exe">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/parakeet-transcribe-windows.exe</source>
+        <source platform="windows" file="ffmpeg.exe">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/ffmpeg.exe</source>
 
         <!-- macOS data files -->
-        <source platform="darwin" file="parakeet-transcribe-macos">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/parakeet-transcribe-macos</source>
-        <source platform="darwin" file="ffmpeg">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/ffmpeg</source>
+        <source platform="darwin" file="parakeet-transcribe-macos">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/parakeet-transcribe-macos</source>
+        <source platform="darwin" file="ffmpeg">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/ffmpeg-macos</source>
 
         <!-- Resources (cross-platform) -->
-        <source file="resources/images/icon.lua">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/resources/images/icon.lua</source>
-        <source file="resources/images/spinner.lua">https://github.com/ooobo/reaspeech/releases/download/v1.0.0/resources/images/spinner.lua</source>
+        <!-- file= specifies install location, URL is download location -->
+        <source file="resources/images/icon.lua">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/icon.lua</source>
+        <source file="resources/images/spinner.lua">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/spinner.lua</source>
       </version>
     </reapack>
   </category>
