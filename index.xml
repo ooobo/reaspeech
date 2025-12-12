@@ -28,11 +28,6 @@
         <!-- macOS data files -->
         <source platform="darwin" file="parakeet-transcribe-macos">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/parakeet-transcribe-macos</source>
         <source platform="darwin" file="ffmpeg">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/ffmpeg-macos</source>
-
-        <!-- Resources (cross-platform) -->
-        <!-- file= specifies install location, URL is download location -->
-        <source file="resources/images/icon.lua">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/icon.lua</source>
-        <source file="resources/images/spinner.lua">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/spinner.lua</source>
       </version>
     </reapack>
   </category>
