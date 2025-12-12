@@ -223,9 +223,9 @@ jobs:
         if [ -n "$RESOURCES_DIR" ]; then
           cp -r "$RESOURCES_DIR" release-assets/
 
-          # Copy individual resource files to release root for ReaPack URLs
-          cp release-assets/resources/images/icon.lua release-assets/icon.lua
-          cp release-assets/resources/images/spinner.lua release-assets/spinner.lua
+          # Copy individual resource files to release root for ReaPack URLs (if they exist)
+          [ -f release-assets/resources/images/icon.lua ] && cp release-assets/resources/images/icon.lua release-assets/icon.lua || true
+          [ -f release-assets/resources/images/spinner.lua ] && cp release-assets/resources/images/spinner.lua release-assets/spinner.lua || true
         fi
 
         ls -lah release-assets/
@@ -263,7 +263,5 @@ jobs:
           release-assets/ffmpeg.exe
           release-assets/parakeet-transcribe-macos
           release-assets/ffmpeg-macos
-          release-assets/icon.lua
-          release-assets/spinner.lua
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
