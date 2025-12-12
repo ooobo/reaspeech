@@ -1,22 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <index version="1" name="ReaSpeech" commit="https://github.com/ooobo/reaspeech/commits/main">
   <category name="Speech Recognition">
-    <reapack name="ReaSpeech.lua" type="script" desc="Speech recognition for REAPER using Parakeet ASR">
+    <reapack name="ReaSpeech.lua" type="script" desc="ReaSpeech Speech Recognition - Ross fork">
       <metadata>
         <description><![CDATA[{
-  "description": "ReaSpeech - Speech recognition for REAPER",
+  "description": "ReaSpeech Speech Recognition - Ross fork",
   "screenshot": "",
-  "author": "ReaSpeech Contributors",
-  "about": "# ReaSpeech\n\nSpeech recognition tool for REAPER using Parakeet TDT ASR model.\n\nFeatures:\n- Local processing (no cloud services)\n- Fast transcription with Parakeet ASR\n- Transcript editing and export\n- Word-level timing\n- SRT and CSV export"
+  "author": "ooobo + TeamAudio",
+  "about": "# ReaSpeech\n\nSpeech recognition tool for REAPER using Parakeet TDT ASR model.\n\nIssues? Email richardson.ross@abc.net.au"
 }]]></description>
       </metadata>
 
-      <version name="0.7.1-fork1" author="ReaSpeech Contributors" time="2025-01-12T00:00:00Z">
-        <changelog><![CDATA[Initial ReaPack release
-- Local executable backend with Parakeet ASR
-- Single-file deployment
-- Auto-registration in REAPER actions
-- Platform-specific packages (Windows/macOS)]]></changelog>
+      <version name="0.7.1-fork1" author="ooobo" time="2025-01-12T00:00:00Z">
+        <changelog><![CDATA[Initial ReaPack release]]></changelog>
 
         <!-- Main script (cross-platform) -->
         <source main="main">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork1/ReaSpeech.lua</source>
