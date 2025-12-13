@@ -125,19 +125,14 @@ function ReaSpeechAPI:transcribe(audio_file, options)
 
   local command = table.concat(command_parts, " ")
 
-  -- Add shell redirection
-  local cmd_with_redirect
-  if EnvUtil.is_windows() then
-    cmd_with_redirect = 'cmd /c "' .. command .. ' > ' .. stdout_file .. ' 2> ' .. stderr_file .. '"'
-  else
-    cmd_with_redirect = command .. ' > "' .. stdout_file .. '" 2> "' .. stderr_file .. '"'
-  end
+  -- Add shell redirection (via_tempfile handles shell execution)
+  local cmd_with_redirect = command .. ' > "' .. stdout_file .. '" 2> "' .. stderr_file .. '"'
 
   -- Record start time
   local start_time = reaper.time_precise()
 
-  -- Start background process
-  local result = ExecProcess.new(cmd_with_redirect):background()
+  -- Start background process using via_tempfile to ensure shell interpretation
+  local result = ExecProcess.via_tempfile(cmd_with_redirect):background()
 
   if not result then
     if options.error_handler then

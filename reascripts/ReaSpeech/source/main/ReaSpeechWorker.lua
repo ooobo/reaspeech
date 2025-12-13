@@ -17,6 +17,8 @@ function ReaSpeechWorker:init()
   self.active_job = nil
   self.pending_jobs = {}
   self.job_count = 0
+  self.processing_start_time = nil
+  self.last_processing_time = nil
 end
 
 function ReaSpeechWorker:react()
@@ -62,6 +64,11 @@ function ReaSpeechWorker:react_handle_jobs()
     self.active_job = pending_job
     self:start_active_job()
   elseif self.job_count ~= 0 then
+    -- Calculate and store processing time
+    if self.processing_start_time then
+      self.last_processing_time = reaper.time_precise() - self.processing_start_time
+      self.processing_start_time = nil
+    end
     self:log('Processing finished')
     self.job_count = 0
   end
@@ -115,6 +122,12 @@ end
 
 function ReaSpeechWorker:handle_request(request)
   self:log('Processing speech...')
+
+  -- Start timer when beginning fresh processing
+  if self.job_count == 0 then
+    self.processing_start_time = reaper.time_precise()
+  end
+
   -- Accumulate job count to prevent progress from resetting when new requests come in
   self.job_count = self.job_count + #request.jobs
 

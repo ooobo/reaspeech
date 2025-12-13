@@ -46,3 +46,4 @@ app/output/*/
 
 /pywhispercpp
 reascripts/ReaSpeech/python/dist/*
+python/dist/*

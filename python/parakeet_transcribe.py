@@ -26,7 +26,28 @@ os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 from onnx_asr import load_model
 
 SAMPLE_RATE = 16000
-FFMPEG_BIN = os.getenv("FFMPEG_BIN", "ffmpeg")
+
+
+def find_ffmpeg():
+    """Find ffmpeg binary - same directory as executable, or PATH."""
+    import shutil
+
+    # Get directory of this executable/script
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+    else:
+        exe_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Check same directory as executable (for bundling)
+    local_ffmpeg = os.path.join(exe_dir, "ffmpeg")
+    if os.path.isfile(local_ffmpeg) and os.access(local_ffmpeg, os.X_OK):
+        return local_ffmpeg
+
+    # Fall back to PATH
+    return shutil.which("ffmpeg") or "ffmpeg"
+
+
+FFMPEG_BIN = find_ffmpeg()
 
 
 def tokens_to_sentences(tokens, timestamps):
@@ -212,7 +233,9 @@ def main():
         quantization = (
             None if args.quantization.lower() == "none" else args.quantization
         )
-        asr = load_model(args.model, quantization=quantization).with_timestamps()
+        asr = load_model(
+            args.model, quantization=quantization, providers=["CPUExecutionProvider"]
+        ).with_timestamps()
         sentences = transcribe_with_chunking(
             asr, str(audio_file), chunk_duration=args.chunk_duration
         )

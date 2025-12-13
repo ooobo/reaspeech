@@ -409,6 +409,12 @@ function TranscriptUI:render_options()
     self.autoplay = value
   end
 
+  -- Show last processing time if available
+  if app and app.worker and app.worker.last_processing_time then
+    ImGui.SameLine(Ctx())
+    ImGui.Text(Ctx(), string.format("(%ds)", math.floor(app.worker.last_processing_time + 0.5)))
+  end
+
   if self.transcript:has_words() then
     ImGui.SameLine(Ctx())
 
