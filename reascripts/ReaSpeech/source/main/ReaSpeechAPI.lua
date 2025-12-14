@@ -38,6 +38,17 @@ function ReaSpeechAPI:get_python_command()
   end
 end
 
+function ReaSpeechAPI:ensure_executable(path)
+  -- Only needed on Unix-like systems (macOS, Linux)
+  -- ReaPack downloads files without execute permission
+  if EnvUtil.is_windows() then
+    return true
+  end
+  -- Use os.execute to chmod +x the file
+  local result = os.execute('chmod +x "' .. path .. '"')
+  return result == 0 or result == true
+end
+
 function ReaSpeechAPI:find_executable(custom_path)
   -- If custom path provided, use it
   if custom_path then
@@ -62,12 +73,27 @@ function ReaSpeechAPI:find_executable(custom_path)
 
   local executable_path = script_dir .. executable_name
   if reaper.file_exists(executable_path) then
+    -- Ensure executables have execute permission (needed for ReaPack installs)
+    self:ensure_executable(executable_path)
+    -- Also chmod ffmpeg in same directory
+    local ffmpeg_name = EnvUtil.is_windows() and "ffmpeg.exe" or "ffmpeg"
+    local ffmpeg_path = script_dir .. ffmpeg_name
+    if reaper.file_exists(ffmpeg_path) then
+      self:ensure_executable(ffmpeg_path)
+    end
     return executable_path, true
   end
 
   -- Fall back to development location (python/dist/)
   local dev_executable_path = script_dir .. "python/dist/" .. executable_name
   if reaper.file_exists(dev_executable_path) then
+    self:ensure_executable(dev_executable_path)
+    -- Also chmod ffmpeg in dev location
+    local ffmpeg_name = EnvUtil.is_windows() and "ffmpeg.exe" or "ffmpeg"
+    local ffmpeg_path = script_dir .. "python/dist/" .. ffmpeg_name
+    if reaper.file_exists(ffmpeg_path) then
+      self:ensure_executable(ffmpeg_path)
+    end
     return dev_executable_path, true
   end
 

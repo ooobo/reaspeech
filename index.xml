@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<index version="1" name="ReaSpeech" commit="https://github.com/ooobo/reaspeech/commits/main">
+<index version="1" name="ReaSpeech" commit="https://github.com/ooobo/reaspeech/commits/beta">
   <category name="Speech Recognition">
     <reapack name="ReaSpeech.lua" type="script" desc="ReaSpeech Speech Recognition - Ross fork">
       <metadata>
@@ -10,7 +10,21 @@
   "about": "# ReaSpeech\n\nSpeech recognition tool for REAPER using Parakeet TDT ASR model.\n\nIssues? Email richardson.ross@abc.net.au"
 }]]></description>
       </metadata>
-      <version name="0.7.1-fork3" author="ooobo" time="2025-12-12T00:00:00Z">
+      <version name="0.7.1-fork4" author="ooobo" time="2025-12-12T00:00:00Z">
+        <changelog><![CDATA[Switch binary to rust]]></changelog>
+
+        <!-- Main script (cross-platform) -->
+        <source main="main">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork4/ReaSpeech.lua</source>
+
+        <!-- Windows data files -->
+        <source platform="windows" file="parakeet-transcribe-windows.exe">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork4/parakeet-transcribe-windows.exe</source>
+        <source platform="windows" file="ffmpeg.exe">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork4/ffmpeg.exe</source>
+
+        <!-- macOS data files -->
+        <source platform="darwin" file="parakeet-transcribe-macos">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork4/parakeet-transcribe-macos</source>
+        <source platform="darwin" file="ffmpeg">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork4/ffmpeg-macos</source>
+      </version>
+      <version name="0.7.1-fork2" author="ooobo" time="2025-12-12T00:00:00Z">
         <changelog><![CDATA[Initial ReaPack release]]></changelog>
 
         <!-- Main script (cross-platform) -->

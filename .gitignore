@@ -47,3 +47,14 @@ app/output/*/
 /pywhispercpp
 reascripts/ReaSpeech/python/dist/*
 python/dist/*
+python/parakeet-transcribe-macos
+
+# Rust build artifacts
+rust-parakeet/target/
+rust-parakeet/Cargo.lock
+rust-parakeet/patches/
+rust-parakeet/parakeet-rs-fork/Cargo.lock
+
+# Binaries (built from rust-parakeet)
+parakeet-transcribe-macos
+parakeet-transcribe-windows.exe

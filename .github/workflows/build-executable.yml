@@ -6,13 +6,11 @@ on:
       - main
       - 'claude/**'
     paths:
-      - 'python/parakeet_transcribe.py'
-      - 'python/parakeet_transcribe.spec'
+      - 'rust-parakeet/**'
       - '.github/workflows/build-executable.yml'
   pull_request:
     paths:
-      - 'python/parakeet_transcribe.py'
-      - 'python/parakeet_transcribe.spec'
+      - 'rust-parakeet/**'
   workflow_dispatch:
 
 jobs:
@@ -22,35 +20,21 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
 
-    - name: Install FFmpeg
+    - name: Build release binary
+      working-directory: rust-parakeet
       run: |
-        choco install ffmpeg -y
-        ffmpeg -version
-
-    - name: Install dependencies
-      working-directory: python
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install onnx-asr onnxruntime numpy ffmpeg-python huggingface-hub
-
-    - name: Build executable
-      working-directory: python
-      run: |
-        pyinstaller parakeet_transcribe.spec
+        cargo build --release --bin parakeet-transcribe-windows
 
     - name: Verify executable
-      working-directory: python
+      working-directory: rust-parakeet
       run: |
-        dir dist
-        if (Test-Path "dist/parakeet-transcribe-windows.exe") {
+        dir target\release
+        if (Test-Path "target/release/parakeet-transcribe-windows.exe") {
           Write-Host "✓ Executable built successfully"
-          $size = (Get-Item "dist/parakeet-transcribe-windows.exe").Length / 1MB
+          $size = (Get-Item "target/release/parakeet-transcribe-windows.exe").Length / 1MB
           Write-Host "Executable size: $([math]::Round($size, 2)) MB"
         } else {
           Write-Error "✗ Executable not found!"
@@ -61,14 +45,13 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: parakeet-transcribe-windows
-        path: python/dist/parakeet-transcribe-windows.exe
+        path: rust-parakeet/target/release/parakeet-transcribe-windows.exe
         retention-days: 90
 
     - name: Test executable (basic check)
-      working-directory: python
+      working-directory: rust-parakeet
       run: |
-        # Just check if it runs without error on --help
-        dist/parakeet-transcribe-windows.exe --help
+        target/release/parakeet-transcribe-windows.exe --help
 
     - name: Cache FFmpeg for Windows
       id: cache-ffmpeg-windows
@@ -96,11 +79,6 @@ jobs:
           Write-Error "✗ FFmpeg executable not found in download!"
           exit 1
         }
-
-    - name: Copy FFmpeg from cache
-      run: |
-        Copy-Item -Path ffmpeg-cache-windows/ffmpeg.exe -Destination python/dist/
-        Write-Host "✓ FFmpeg copied to dist folder"
 
     - name: Create deployment package
       run: |
@@ -164,8 +142,8 @@ jobs:
         Copy-Item -Path reascripts/ReaSpeech/resources -Destination package/ -Recurse
 
         # Copy executables to package root
-        Copy-Item -Path python/dist/parakeet-transcribe-windows.exe -Destination package/
-        Copy-Item -Path python/dist/ffmpeg.exe -Destination package/
+        Copy-Item -Path rust-parakeet/target/release/parakeet-transcribe-windows.exe -Destination package/
+        Copy-Item -Path ffmpeg-cache-windows/ffmpeg.exe -Destination package/
 
         # Create README
         @"
@@ -216,35 +194,21 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
 
-    - name: Install FFmpeg
+    - name: Build release binary
+      working-directory: rust-parakeet
       run: |
-        brew install ffmpeg
-        ffmpeg -version
-
-    - name: Install dependencies
-      working-directory: python
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        pip install onnx-asr onnxruntime numpy ffmpeg-python huggingface-hub
-
-    - name: Build executable
-      working-directory: python
-      run: |
-        pyinstaller parakeet_transcribe.spec
+        cargo build --release --bin parakeet-transcribe-macos
 
     - name: Verify executable
-      working-directory: python
+      working-directory: rust-parakeet
       run: |
-        ls -lh dist/
-        if [ -f "dist/parakeet-transcribe-macos" ]; then
+        ls -lh target/release/
+        if [ -f "target/release/parakeet-transcribe-macos" ]; then
           echo "✓ Executable built successfully"
-          size=$(du -h dist/parakeet-transcribe-macos | cut -f1)
+          size=$(du -h target/release/parakeet-transcribe-macos | cut -f1)
           echo "Executable size: $size"
         else
           echo "✗ Executable not found!"
@@ -255,15 +219,14 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: parakeet-transcribe-macos
-        path: python/dist/parakeet-transcribe-macos
+        path: rust-parakeet/target/release/parakeet-transcribe-macos
         retention-days: 90
 
     - name: Test executable (basic check)
-      working-directory: python
+      working-directory: rust-parakeet
       run: |
-        # Just check if it runs without error on --help
-        chmod +x dist/parakeet-transcribe-macos
-        dist/parakeet-transcribe-macos --help
+        chmod +x target/release/parakeet-transcribe-macos
+        target/release/parakeet-transcribe-macos --help
 
     - name: Cache FFmpeg for macOS
       id: cache-ffmpeg-macos
@@ -293,10 +256,11 @@ jobs:
 
     - name: Copy FFmpeg from cache
       run: |
-        cp ffmpeg-cache-macos/ffmpeg python/dist/
-        chmod +x python/dist/ffmpeg
-        echo "✓ FFmpeg copied to dist folder"
-        ls -lh python/dist/ffmpeg
+        mkdir -p rust-parakeet/target/release
+        cp ffmpeg-cache-macos/ffmpeg rust-parakeet/target/release/
+        chmod +x rust-parakeet/target/release/ffmpeg
+        echo "✓ FFmpeg copied to release folder"
+        ls -lh rust-parakeet/target/release/ffmpeg
 
     - name: Create deployment package
       run: |
@@ -357,8 +321,8 @@ jobs:
         cp -r reascripts/ReaSpeech/resources package/
 
         # Copy executables to package root
-        cp python/dist/parakeet-transcribe-macos package/
-        cp python/dist/ffmpeg package/
+        cp rust-parakeet/target/release/parakeet-transcribe-macos package/
+        cp rust-parakeet/target/release/ffmpeg package/
 
         # Make executables executable
         chmod +x package/parakeet-transcribe-macos
