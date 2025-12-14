@@ -1,94 +1,66 @@
-# ReaSpeech
-![Lint & Test](https://github.com/teamaudio/reaspeech/actions/workflows/check-reascripts.yml/badge.svg)
+# ReaSpeech Fork
 
 ### Painless speech-to-text transcription inside of REAPER
-ReaSpeech is a ReaScript that provides speech-to-text transcription using the Parakeet TDT ASR model. It runs locally on your machine with no cloud services required, building a searchable, project-marker based index of the resulting transcription.
 
-![Screenshot](docs/assets/img/reaspeech-screenshot.png)
+This is a fork of [ReaSpeech](https://github.com/TeamAudio/reaspeech). Main differences are docker-based transcription service was replaced with a standalone executable based on [parakeet-rs](https://github.com/altunenes/parakeet-rs), a few improvements to the transcript display, and simple insertion of the raw audio.
+
+The main aim of the fork is to target running the transcription on regular hardware without CPU. Parakeet TDT v2 is state of the art for English ASR in speed/accuracy, in most tests without a GPU transcribed 1 hour of audio in about 3-5mins.
 
 # Installation
 
 ## Via ReaPack (Recommended)
 
-1. In REAPER, go to **Extensions > ReaPack > Import repositories**
-2. Add this repository URL: `https://github.com/ooobo/reaspeech/raw/main/index.xml`
-3. Go to **Extensions > ReaPack > Browse packages**
+1. In REAPER, go to **Actions > ReaPack: Import repositories**
+2. Add this repository URL: `https://github.com/ooobo/reaspeech/raw/beta/index.xml`
+3. Go to **Actions > ReaPack: Browse packages**
 4. Search for "ReaSpeech" and click Install
-5. ReaPack will automatically download the correct files for your platform
+5. ReaPack will automatically download the correct files for your platform.
+   X. To update, run **Actions > ReaPack: Synchronize packages**
 
 ## Manual Installation
 
 ### Windows
-1. Download the latest `reaspeech-windows-package.zip` from [GitHub Actions](https://github.com/ooobo/reaspeech/actions) or [Releases](https://github.com/ooobo/reaspeech/releases)
+
+1. Download the latest `reaspeech-windows-package.zip` from [Releases](https://github.com/ooobo/reaspeech/releases)
 2. Extract to `%AppData%\Roaming\REAPER\Scripts\ReaSpeech`
 3. In REAPER: Actions > Show action list > New Action... > Load ReaScript
 4. Load `ReaSpeech.lua` from that folder
 
 ### macOS
-1. Download the latest `reaspeech-macos-package.zip` from [GitHub Actions](https://github.com/ooobo/reaspeech/actions) or [Releases](https://github.com/ooobo/reaspeech/releases)
+
+1. Download the latest `reaspeech-macos-package.zip` from [Releases](https://github.com/ooobo/reaspeech/releases)
 2. Extract to `~/Library/Application Support/REAPER/Scripts/ReaSpeech`
 3. In REAPER: Actions > Show action list > New Action... > Load ReaScript
 4. Load `ReaSpeech.lua` from that folder
-5. On first run, allow the executables in System Settings > Privacy & Security
+5. On first run, you may need to allow the executables in System Settings > Privacy & Security
 
 # Quick Usage
 
-* Select media items in REAPER
-* Run ReaSpeech from the Actions menu
-* Choose transcription settings
-* Wait for processing (runs locally, no internet required)
-* View, edit, and export transcripts
+- Select media items in REAPER
+- Run ReaSpeech from the Actions menu
+- Choose transcription settings
+- Wait for processing (runs locally, no internet required)
+- View, edit, and export transcripts
 
----
+# Note
 
-# Legacy Docker Installation
-
-For the older Docker-based version, see below:
-
-* Install [Docker](https://www.docker.com/)
-* Run the [Docker image](https://hub.docker.com/r/techaudiodoc/reaspeech)
-* Navigate to [localhost:9000](http://localhost:9000/)
-
-## Docker Commands
-
-### CPU
-
-    docker run -d -p 9000:9000 --name reaspeech techaudiodoc/reaspeech:latest
-
-### GPU: Windows/NVIDIA
-
-    docker run -d --gpus all -p 9000:9000 --name reaspeech-gpu techaudiodoc/reaspeech:latest-gpu
-
-### GPU: Apple Silicon
-
-Please see our [Apple Silicon GPU instructions](docs/no-docker.md#apple-silicon-gpu)
-
----
-
-For more detailed instructions, see [Docker Usage](docs/docker.md)
-
-# Documentation
-
-* [Docker Usage](docs/docker.md)
-* [Running Outside of Docker](docs/no-docker.md)
-* [Contributing](docs/CONTRIBUTING.md)
-* [Development](docs/development.md)
+Docker and native python support has been replaced so will no longer work.
 
 # Credits
 
+As per original credits:
+
 ## ReaSpeech Team
 
-* [Dave Benjamin](https://github.com/ramen)
-* [Jason Nanna](https://github.com/smrl)
-* [Kyle Vande Slunt](https://github.com/kvande-standingwave)
-* [Michael DeFreitas](https://github.com/mikeylove)
-* [Roel Sanchez](https://github.com/roelsan)
+- [Dave Benjamin](https://github.com/ramen)
+- [Jason Nanna](https://github.com/smrl)
+- [Kyle Vande Slunt](https://github.com/kvande-standingwave)
+- [Michael DeFreitas](https://github.com/mikeylove)
+- [Roel Sanchez](https://github.com/roelsan)
 
 ## Third-Party Software
 
-ReaSpeech's initial web service and Docker setup were based on the [Whisper ASR Webservice](https://github.com/ahmetoner/whisper-asr-webservice) project.
-
-Transcription is provided by the [Faster Whisper](https://github.com/SYSTRAN/faster-whisper) library.
+Transcription is provided by the [parakeet-rs](https://github.com/altunenes/parakeet-rs) library.
 
 ReaSpeech uses [ReaImGui](https://github.com/cfillion/reaimgui) by Christian Fillion for its user interface toolkit.
 
@@ -96,7 +68,5 @@ ReaSpeech uses [ReaImGui](https://github.com/cfillion/reaimgui) by Christian Fil
 
 ReaSpeech is licensed under the terms of the
 [GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html).
-Portions are derived from the
-[whisper-asr-webservice](https://github.com/ahmetoner/whisper-asr-webservice)
-project, which is MIT-licensed. All source files in this repository should be
+All source files in this repository should be
 considered GPL-licensed unless otherwise specified.
