@@ -17,6 +17,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Set version from tag
+      id: version
+      run: |
+        if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+          $VERSION = "${{ github.event.inputs.version }}"
+        } else {
+          $VERSION = "${{ github.ref_name }}"
+        }
+        echo "VERSION=$VERSION" >> $env:GITHUB_OUTPUT
+        Write-Host "Version: $VERSION"
+
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
@@ -25,27 +36,10 @@ jobs:
       run: |
         cargo build --release --bin parakeet-transcribe-windows
 
-    - name: Cache FFmpeg for Windows
-      id: cache-ffmpeg-windows
-      uses: actions/cache@v4
-      with:
-        path: ffmpeg-cache-windows
-        key: ffmpeg-windows-essentials-v1
-
-    - name: Download FFmpeg for Windows
-      if: steps.cache-ffmpeg-windows.outputs.cache-hit != 'true'
-      run: |
-        $ffmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-        Invoke-WebRequest -Uri $ffmpegUrl -OutFile ffmpeg.zip
-        Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg-temp
-        $ffmpegExe = Get-ChildItem -Path ffmpeg-temp -Recurse -Filter ffmpeg.exe | Select-Object -First 1
-        if ($ffmpegExe) {
-          New-Item -ItemType Directory -Path ffmpeg-cache-windows -Force
-          Copy-Item $ffmpegExe.FullName -Destination ffmpeg-cache-windows/ffmpeg.exe
-        }
-
     - name: Build ReaSpeech bundle
       run: |
+        $VERSION = "${{ steps.version.outputs.VERSION }}"
+
         cd reascripts/ReaSpeech
         $bundleContent = @(
           "source/include/header.lua",
@@ -63,7 +57,7 @@ jobs:
         Get-Content $bundleContent | Set-Content -Path "build/ReaSpeechBundle.lua" -Encoding UTF8
 
         "-- @description ReaSpeech - Speech recognition for REAPER" | Set-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
-        "-- @version 0.7.1-fork1" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
+        "-- @version $VERSION" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "-- @author ReaSpeech Contributors" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "-- @about" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         "--   # ReaSpeech" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
@@ -87,7 +81,6 @@ jobs:
         path: |
           reascripts/ReaSpeech/build/ReaSpeech.lua
           rust-parakeet/target/release/parakeet-transcribe-windows.exe
-          ffmpeg-cache-windows/ffmpeg.exe
           reascripts/ReaSpeech/resources/
 
   build-macos:
@@ -103,29 +96,12 @@ jobs:
       run: |
         cargo build --release --bin parakeet-transcribe-macos
 
-    - name: Cache FFmpeg for macOS
-      id: cache-ffmpeg-macos
-      uses: actions/cache@v4
-      with:
-        path: ffmpeg-cache-macos
-        key: ffmpeg-macos-7.1-v1
-
-    - name: Download FFmpeg for macOS
-      if: steps.cache-ffmpeg-macos.outputs.cache-hit != 'true'
-      run: |
-        curl -L -o ffmpeg.7z https://evermeet.cx/ffmpeg/ffmpeg-7.1.7z
-        brew install p7zip
-        7z x ffmpeg.7z
-        mkdir -p ffmpeg-cache-macos
-        mv ffmpeg ffmpeg-cache-macos/
-
     - name: Upload macOS artifacts
       uses: actions/upload-artifact@v4
       with:
         name: macos-release-files
         path: |
           rust-parakeet/target/release/parakeet-transcribe-macos
-          ffmpeg-cache-macos/ffmpeg
 
   create-release:
     needs: [build-windows, build-macos]
@@ -171,15 +147,12 @@ jobs:
         # Main script (from Windows build)
         find windows-files -name "ReaSpeech.lua" -type f -exec cp {} release-assets/ \;
 
-        # Windows executables
+        # Windows executable
         find windows-files -name "parakeet-transcribe-windows.exe" -type f -exec cp {} release-assets/ \;
-        find windows-files -name "ffmpeg.exe" -type f -exec cp {} release-assets/ \;
 
-        # macOS executables
+        # macOS executable
         find macos-files -name "parakeet-transcribe-macos" -type f -exec cp {} release-assets/ \;
-        find macos-files -name "ffmpeg" -type f -exec cp {} release-assets/ffmpeg-macos \;
         chmod +x release-assets/parakeet-transcribe-macos
-        chmod +x release-assets/ffmpeg-macos
 
         # Resources (find the resources directory)
         RESOURCES_DIR=$(find windows-files -type d -name "resources" | head -1)
@@ -223,8 +196,39 @@ jobs:
         files: |
           release-assets/ReaSpeech.lua
           release-assets/parakeet-transcribe-windows.exe
-          release-assets/ffmpeg.exe
           release-assets/parakeet-transcribe-macos
-          release-assets/ffmpeg-macos
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update index.xml for ReaPack
+      run: |
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        VERSION_NAME="${VERSION#v}"
+        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        REPO_URL="https://github.com/ooobo/reaspeech/releases/download/${VERSION}"
+
+        # Create new version entry file
+        cat > /tmp/new_version.xml << ENDVERSION
+          <version name="${VERSION_NAME}" author="ooobo" time="${TIMESTAMP}">
+            <changelog><![CDATA[Release ${VERSION}]]></changelog>
+            <source main="main">${REPO_URL}/ReaSpeech.lua</source>
+            <source platform="windows" file="parakeet-transcribe-windows.exe">${REPO_URL}/parakeet-transcribe-windows.exe</source>
+            <source platform="darwin" file="parakeet-transcribe-macos">${REPO_URL}/parakeet-transcribe-macos</source>
+          </version>
+        ENDVERSION
+
+        # Insert after </metadata> tag
+        sed -i '/<\/metadata>/r /tmp/new_version.xml' index.xml
+
+        echo "✓ Added version ${VERSION_NAME} to index.xml"
+        cat index.xml
+
+    - name: Commit and push index.xml
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add index.xml
+        git commit -m "Update index.xml for ${{ steps.version.outputs.VERSION }}"
+        git push origin HEAD:beta
