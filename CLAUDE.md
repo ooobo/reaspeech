@@ -77,12 +77,12 @@ Download artifacts from Actions tab (90 day retention).
 **Rust crates** (compiled into binary):
 - parakeet-rs (local fork)
 - clap, serde, serde_json
-- hound (WAV reading)
+- symphonia (native audio decoding: WAV, MP3, FLAC, AAC, OGG, etc.)
+- rubato (high-quality audio resampling)
 - hf-hub (HuggingFace model download)
-- eyre, dirs, tempfile
+- eyre, dirs
 
-**External dependencies** (user must install):
-- FFmpeg binary (can be in PATH or same dir as executable)
+**External dependencies**: None (fully self-contained executable)
 
 ## Configuration
 
@@ -97,9 +97,9 @@ Download artifacts from Actions tab (90 day retention).
 - Alternative: `none` (fp32, larger ~2.5GB models)
 
 ### Audio Requirements
-- Sample rate: 16kHz (ffmpeg converts automatically)
-- Channels: Mono (ffmpeg converts automatically)
-- Formats: Any format ffmpeg supports (WAV, MP3, FLAC, etc.)
+- Sample rate: 16kHz (converted automatically via rubato)
+- Channels: Mono (converted automatically)
+- Formats: WAV, MP3, FLAC, AAC/M4A, OGG/Vorbis, ALAC, ADPCM (via symphonia)
 
 ### Chunking
 - Files > 120s: Chunked with 15s overlap

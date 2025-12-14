@@ -2,13 +2,18 @@ use clap::Parser;
 use eyre::{Context, Result};
 use hf_hub::api::sync::Api;
 use parakeet_rs::{ParakeetTDT, TimestampMode};
+use rubato::{FftFixedIn, Resampler};
 use serde::Serialize;
-use std::fs;
+use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Instant;
-use tempfile::TempDir;
+use symphonia::core::audio::SampleBuffer;
+use symphonia::core::codecs::DecoderOptions;
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::probe::Hint;
 
 const SAMPLE_RATE: u32 = 16000;
 const OVERLAP_DURATION: f32 = 15.0;
@@ -61,7 +66,7 @@ fn get_model_dir(model: &str, quantization: &str) -> Result<PathBuf> {
     let cache_dir = dirs::cache_dir()
         .ok_or_else(|| eyre::eyre!("Could not find cache directory"))?
         .join("parakeet-tdt")
-        .join(format!("{}-{}", model, quantization));
+        .join(format!("{model}-{quantization}"));
     Ok(cache_dir)
 }
 
@@ -79,17 +84,19 @@ fn ensure_model_files(model: &str, quantization: &str) -> Result<PathBuf> {
     let vocab_path = model_dir.join("vocab.txt");
 
     if encoder_path.exists() && decoder_path.exists() && vocab_path.exists() {
-        eprintln!("Using cached model files from {:?}", model_dir);
+        eprintln!("Using cached model files from {model_dir:?}");
         return Ok(model_dir);
     }
 
-    eprintln!("Downloading model files from {}...", repo_id);
+    eprintln!("Downloading model files from {repo_id}...");
     let api = Api::new().wrap_err("Failed to create HuggingFace API client")?;
     let repo = api.model(repo_id.to_string());
 
     // Download vocab.txt (same for all quantizations)
     eprintln!("  Downloading vocab.txt...");
-    let vocab_src = repo.get("vocab.txt").wrap_err("Failed to download vocab.txt")?;
+    let vocab_src = repo
+        .get("vocab.txt")
+        .wrap_err("Failed to download vocab.txt")?;
     fs::copy(&vocab_src, &vocab_path).wrap_err("Failed to copy vocab.txt")?;
 
     if use_int8 {
@@ -128,73 +135,171 @@ fn ensure_model_files(model: &str, quantization: &str) -> Result<PathBuf> {
         fs::copy(&decoder_src, &decoder_path).wrap_err("Failed to copy decoder model")?;
     }
 
-    eprintln!("Model files downloaded to {:?}", model_dir);
+    eprintln!("Model files downloaded to {model_dir:?}");
     Ok(model_dir)
 }
 
-fn convert_audio_with_ffmpeg(input_path: &str, output_path: &Path) -> Result<()> {
-    // Find ffmpeg - check same dir as executable, then PATH
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+/// Load audio from any supported format and convert to 16kHz mono f32 samples
+/// Supports: WAV, MP3, FLAC, OGG, AAC/M4A, and more via symphonia
+fn load_audio_native(path: &Path) -> Result<Vec<f32>> {
+    let file = File::open(path).wrap_err("Failed to open audio file")?;
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
-    let ffmpeg_path = exe_dir
-        .as_ref()
-        .map(|d| d.join("ffmpeg"))
-        .filter(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from("ffmpeg"));
-
-    let output = Command::new(&ffmpeg_path)
-        .args([
-            "-y",
-            "-i",
-            input_path,
-            "-ar",
-            "16000",
-            "-ac",
-            "1",
-            "-f",
-            "wav",
-            "-acodec",
-            "pcm_s16le",
-            output_path.to_str().unwrap(),
-        ])
-        .output()
-        .wrap_err("Failed to run ffmpeg")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(eyre::eyre!("ffmpeg failed: {}", stderr));
+    // Provide a hint about the file extension
+    let mut hint = Hint::new();
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
     }
 
-    Ok(())
-}
+    // Probe the file to detect format
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("unknown");
+    let unsupported_msg = format!(
+        "Cannot decode .{} files. Supported: WAV, MP3, FLAC, AAC/M4A, OGG. \
+        In REAPER, select the item and use 'Glue items' (Cmd+Shift+G) to convert it first.",
+        ext
+    );
+    let probed = symphonia::default::get_probe()
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .map_err(|_| eyre::eyre!("{unsupported_msg}"))?;
 
-fn load_wav_samples(path: &Path) -> Result<Vec<f32>> {
-    let reader = hound::WavReader::open(path)?;
-    let spec = reader.spec();
+    let mut format = probed.format;
 
-    let samples: Vec<f32> = match spec.sample_format {
-        hound::SampleFormat::Float => reader
-            .into_samples::<f32>()
-            .collect::<std::result::Result<Vec<_>, _>>()?,
-        hound::SampleFormat::Int => reader
-            .into_samples::<i16>()
-            .map(|s| s.map(|s| s as f32 / 32768.0))
-            .collect::<std::result::Result<Vec<_>, _>>()?,
-    };
+    // Find the first audio track
+    let track = format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL)
+        .ok_or_else(|| eyre::eyre!("No audio track found"))?;
 
-    // Convert to mono if stereo
-    let samples = if spec.channels > 1 {
-        samples
-            .chunks(spec.channels as usize)
-            .map(|chunk| chunk.iter().sum::<f32>() / spec.channels as f32)
+    let track_id = track.id;
+    let codec_params = track.codec_params.clone();
+
+    let source_sample_rate = codec_params
+        .sample_rate
+        .ok_or_else(|| eyre::eyre!("Unknown sample rate"))?;
+    let channels = codec_params.channels.map_or(1, |c| c.count());
+
+    // Create decoder
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&codec_params, &DecoderOptions::default())
+        .map_err(|_| eyre::eyre!("{unsupported_msg}"))?;
+
+    // Decode all samples
+    let mut all_samples: Vec<f32> = Vec::new();
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(packet) => packet,
+            Err(symphonia::core::errors::Error::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break;
+            }
+            Err(e) => return Err(e).wrap_err("Failed to read packet"),
+        };
+
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        let decoded = match decoder.decode(&packet) {
+            Ok(decoded) => decoded,
+            Err(symphonia::core::errors::Error::DecodeError(_)) => continue,
+            Err(e) => return Err(e).wrap_err("Failed to decode packet"),
+        };
+
+        // Convert to f32 samples
+        let spec = *decoded.spec();
+        let num_frames = decoded.frames();
+
+        if num_frames == 0 {
+            continue;
+        }
+
+        let mut sample_buf = SampleBuffer::<f32>::new(num_frames as u64, spec);
+        sample_buf.copy_interleaved_ref(decoded);
+
+        all_samples.extend(sample_buf.samples());
+    }
+
+    if all_samples.is_empty() {
+        return Err(eyre::eyre!("No audio samples decoded"));
+    }
+
+    // Convert to mono if multi-channel
+    let mono_samples = if channels > 1 {
+        all_samples
+            .chunks(channels)
+            .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
             .collect()
     } else {
-        samples
+        all_samples
     };
 
-    Ok(samples)
+    // Resample to 16kHz if needed
+    let final_samples = if source_sample_rate != SAMPLE_RATE {
+        resample_audio(&mono_samples, source_sample_rate, SAMPLE_RATE)?
+    } else {
+        mono_samples
+    };
+
+    Ok(final_samples)
+}
+
+/// Resample audio from source_rate to target_rate using high-quality FFT resampling
+fn resample_audio(samples: &[f32], source_rate: u32, target_rate: u32) -> Result<Vec<f32>> {
+    if source_rate == target_rate {
+        return Ok(samples.to_vec());
+    }
+
+    // Calculate resampling parameters
+    let chunk_size = 4096;
+    let mut resampler = FftFixedIn::<f32>::new(
+        source_rate as usize,
+        target_rate as usize,
+        chunk_size,
+        2, // sub-chunks for better quality
+        1, // mono
+    )
+    .wrap_err("Failed to create resampler")?;
+
+    let mut output = Vec::new();
+    let mut pos = 0;
+
+    // Process in chunks
+    while pos < samples.len() {
+        let end = (pos + chunk_size).min(samples.len());
+        let mut chunk = samples[pos..end].to_vec();
+
+        // Pad last chunk if needed
+        if chunk.len() < chunk_size {
+            chunk.resize(chunk_size, 0.0);
+        }
+
+        let resampled = resampler
+            .process(&[chunk], None)
+            .wrap_err("Resampling failed")?;
+
+        if !resampled.is_empty() {
+            output.extend(&resampled[0]);
+        }
+
+        pos += chunk_size;
+    }
+
+    // Trim to expected length (avoid padding artifacts at the end)
+    let expected_len = (samples.len() as f64 * target_rate as f64 / source_rate as f64) as usize;
+    output.truncate(expected_len);
+
+    Ok(output)
 }
 
 /// Clean up text output from TDT model
@@ -353,25 +458,22 @@ fn transcribe_with_chunking(
     Ok(all_segments)
 }
 
-fn main() -> Result<()> {
-    let args = Args::parse();
+fn run(args: &Args) -> Result<()> {
     let start_time = Instant::now();
 
     // Check input file exists
     let audio_path = Path::new(&args.audio_file);
     if !audio_path.exists() {
-        eprintln!("ERROR: Audio file not found: {}", args.audio_file);
-        std::process::exit(1);
+        return Err(eyre::eyre!("Audio file not found: {}", args.audio_file));
     }
 
     // Validate quantization
     let quantization = args.quantization.to_lowercase();
     if quantization != "int8" && quantization != "none" {
-        eprintln!(
-            "ERROR: Invalid quantization '{}'. Use 'int8' or 'none'",
+        return Err(eyre::eyre!(
+            "Invalid quantization '{}'. Use 'int8' or 'none'",
             args.quantization
-        );
-        std::process::exit(1);
+        ));
     }
 
     // Ensure model files are downloaded
@@ -379,19 +481,12 @@ fn main() -> Result<()> {
         "Using model: {} with quantization: {}",
         args.model, quantization
     );
-    let model_dir =
-        ensure_model_files(&args.model, &quantization).wrap_err("Failed to download model files")?;
+    let model_dir = ensure_model_files(&args.model, &quantization)
+        .wrap_err("Failed to download model files")?;
 
-    // Create temp directory for converted audio
-    let temp_dir = TempDir::new()?;
-    let wav_path = temp_dir.path().join("audio.wav");
-
-    // Convert audio to 16kHz mono WAV using ffmpeg
-    eprintln!("Converting audio with ffmpeg...");
-    convert_audio_with_ffmpeg(&args.audio_file, &wav_path)?;
-
-    // Load WAV samples
-    let audio_samples = load_wav_samples(&wav_path)?;
+    // Load and convert audio to 16kHz mono (native, no ffmpeg needed)
+    eprintln!("Loading audio...");
+    let audio_samples = load_audio_native(audio_path)?;
     let duration = audio_samples.len() as f32 / SAMPLE_RATE as f32;
     eprintln!(
         "Loaded {:.1}s of audio ({} samples)",
@@ -419,10 +514,23 @@ fn main() -> Result<()> {
     let elapsed = start_time.elapsed();
     eprintln!("Rust processing time: {:.2}s", elapsed.as_secs_f32());
 
-    // Write completion marker if specified
-    if let Some(marker_path) = args.completion_marker {
-        fs::write(&marker_path, "done\n")?;
+    Ok(())
+}
+
+fn main() {
+    let args = Args::parse();
+    let marker_path = args.completion_marker.clone();
+
+    let result = run(&args);
+
+    // Always write completion marker if specified (even on error)
+    if let Some(ref path) = marker_path {
+        let _ = fs::write(path, "done\n");
     }
 
-    Ok(())
+    // Handle errors with user-friendly output
+    if let Err(e) = result {
+        eprintln!("ERROR: {:#}", e);
+        std::process::exit(1);
+    }
 }

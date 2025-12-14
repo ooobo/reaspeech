@@ -16,11 +16,13 @@ parakeet-rs = { path = "parakeet-rs-fork" }
 clap = { version = "4.4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-hound = "3.5"
 eyre = "0.6"
 hf-hub = "0.4"
 dirs = "5.0"
-tempfile = "3.9"
+
+# Native audio decoding (replaces ffmpeg)
+symphonia = { version = "0.5", features = ["all"] }
+rubato = "0.15"
 
 [profile.release]
 lto = true
