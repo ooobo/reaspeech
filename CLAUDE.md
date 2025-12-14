@@ -2,38 +2,19 @@
 
 ## Project Overview
 
-Converting ReaSpeech from Docker/Flask/HTTP backend to local Python executable using Parakeet TDT ASR model.
+ReaSpeech uses a local Rust executable (parakeet-rs) for Parakeet TDT ASR transcription.
 
 ## Current Status
 
 ### ✅ Completed
-- ✅ Created `parakeet_transcribe.py` using onnx-asr (from reaspeech-lite)
+- ✅ Rust-based transcription using parakeet-rs (fork with v2 model support)
 - ✅ Modified `ReaSpeechAPI.lua` for local executable execution
 - ✅ Simplified `ReaSpeechWorker.lua` (removed HTTP polling)
 - ✅ Updated UI components (ASRControls, ASRPlugin, WhisperModels)
-- ✅ Fixed all Lua lint warnings
-- ✅ Fixed unit tests (TestReaSpeechUI)
-- ✅ Added GitHub Actions workflow to build Windows executable
-- ✅ Fixed ffmpeg integration (using ffmpeg-python library)
-- ✅ Transcription working with minimal overhead (<1s on 10min files)
+- ✅ GitHub Actions workflow builds Windows and macOS executables
 - ✅ Completion marker file for reliable detection
-- ✅ Integrated timing logs with existing logging infrastructure
-- ✅ Cleaned up all experimental code
-
-### ✅ Performance Optimized
-
-**Final measurements**:
-- Direct execution: 10min file = **49s**
-- Through REAPER: 10min file = **~49-50s** (<1s overhead)
-
-**Solution**: Completion marker file approach
-- Python writes segments to stdout (simple print)
-- Python writes completion marker file as final step
-- Lua polls for marker file existence (fast check)
-- Shell redirection captures stdout/stderr
-- Progress based on jobs completed
-
-**STATUS**: ✅ READY TO MERGE
+- ✅ Both v2 and v3 Parakeet models supported
+- ✅ Int8 quantization support (smaller, faster models)
 
 ## Architecture
 
@@ -50,99 +31,70 @@ REAPER → ReaSpeechAPI:transcribe()
 **Key features**:
 - Direct ExecProcess (no wrapper overhead)
 - Completion marker file (faster than size checks)
-- Python flushes stdout before writing marker
-- Lua uses existing Logging() infrastructure
+- Rust flushes stdout before writing marker
 - Progress based on jobs completed (no file reads during processing)
 
 ### Key Files
 
-**Python**:
-- `python/parakeet_transcribe.py` - Main transcription script
+**Rust** (`rust-parakeet/`):
+- `src/main.rs` - Main transcription CLI
   - Arguments: audio_file, --model, --chunk-duration, --quantization, --completion-marker
   - Outputs: segments to stdout (JSON per line)
-  - Timing: `[TIMING] Python processing time: X.XXs` to stderr
-- `python/parakeet_transcribe.spec` - PyInstaller spec
+  - Timing: `Rust processing time: X.XXs` to stderr
+- `Cargo.toml` - Two binary targets: parakeet-transcribe-macos, parakeet-transcribe-windows
+- `parakeet-rs-fork/` - Patched parakeet-rs with dynamic vocab_size (fixes v2 model support)
 
 **Lua**:
 - `reascripts/ReaSpeech/source/main/ReaSpeechAPI.lua` - API wrapper
-  - Creates inline process object with ready/error/result/progress methods
-  - Uses Logging() for timing output
 - `reascripts/ReaSpeech/source/main/ReaSpeechWorker.lua` - Job management
-  - Polls process:ready() every 1s
-  - Calculates progress based on completed/total jobs
 - `reascripts/ReaSpeech/source/ui/ASRPlugin.lua` - UI callback handler
 
 **CI/CD**:
-- `.github/workflows/build-executable.yml` - Builds Windows .exe
-
-## Technical Details
-
-### Completion Detection
-**Current approach** (in `ReaSpeechAPI.lua:ready()`):
-1. Every 1.0s (via ReaSpeechWorker), check if marker file exists
-2. If marker exists: Process complete (Python writes marker as final step)
-3. Read stdout file once for all segments
-4. Read stderr file once for error checking
-5. Clean up all temp files
-
-**Why marker file**:
-- Checking file existence is faster than opening/seeking large files
-- Marker is tiny (5 bytes) vs potentially large stdout
-- Written as absolute last step after stdout.flush()
-- No race conditions or partial reads
-
-### Progress Calculation
-Progress is based on **jobs completed**, not file reads:
-```lua
-completed_jobs = total_jobs - pending_jobs - 1 (active)
-active_job_progress = 0.5 (50% while processing)
-progress = (completed_jobs + active_job_progress) / total_jobs
-```
-
-This avoids all file I/O overhead during processing.
-
-### Logging
-**Python**: Simple print statements to stderr
-```python
-print(f"[TIMING] Python processing time: {elapsed:.2f}s", file=sys.stderr)
-```
-
-**Lua**: Uses existing Logging() infrastructure
-```lua
-self.logger:log(string.format("[TIMING] Lua wall-clock time: %.2fs", elapsed))
-```
+- `.github/workflows/build-executable.yml` - Builds Windows/macOS executables
+- `.github/workflows/release.yml` - Creates GitHub releases
 
 ## Building the Executable
 
-### Local Build
+### Local Build (macOS)
 ```bash
-cd python
-pip install pyinstaller onnx-asr onnxruntime ffmpeg-python numpy huggingface-hub
-pyinstaller parakeet_transcribe.spec
-# Output: python/dist/parakeet-transcribe-windows.exe
+cd rust-parakeet
+~/.cargo/bin/cargo build --release --bin parakeet-transcribe-macos
+# Output: rust-parakeet/target/release/parakeet-transcribe-macos
+```
+
+### Local Build (Windows)
+```bash
+cd rust-parakeet
+cargo build --release --bin parakeet-transcribe-windows
+# Output: rust-parakeet/target/release/parakeet-transcribe-windows.exe
 ```
 
 ### GitHub Actions
-Push to `claude/local-executable-backend-*` branch triggers build.
-Download artifact from Actions tab (90 day retention).
+Push to `main` or `claude/**` branches triggers build.
+Download artifacts from Actions tab (90 day retention).
 
 ### Dependencies
-**Python packages** (bundled in .exe):
-- onnx-asr
-- onnxruntime
-- ffmpeg-python
-- numpy
-- huggingface-hub
+**Rust crates** (compiled into binary):
+- parakeet-rs (local fork)
+- clap, serde, serde_json
+- hound (WAV reading)
+- hf-hub (HuggingFace model download)
+- eyre, dirs, tempfile
 
 **External dependencies** (user must install):
-- FFmpeg binary (can be in PATH or same dir as .exe)
+- FFmpeg binary (can be in PATH or same dir as executable)
 
 ## Configuration
 
 ### Model
-- Default: `nemo-parakeet-tdt-0.6b-v2`
+- Default: `nemo-parakeet-tdt-0.6b-v2` (English-only, smaller vocab)
+- Alternative: `nemo-parakeet-tdt-0.6b-v3` (multilingual, larger vocab)
 - Downloaded automatically from HuggingFace on first run
-- Cached in user's HuggingFace cache directory
+- Cached in `~/Library/Caches/parakeet-tdt/` (macOS) or equivalent
+
+### Quantization
+- Default: `int8` (smaller, ~652MB models)
+- Alternative: `none` (fp32, larger ~2.5GB models)
 
 ### Audio Requirements
 - Sample rate: 16kHz (ffmpeg converts automatically)
@@ -154,20 +106,15 @@ Download artifact from Actions tab (90 day retention).
 - Chunks processed sequentially
 - Progress shows as 50% during active job processing
 
-## Performance Summary
+## parakeet-rs Fork
 
-### What We Learned
-1. **Direct file writes are slow**: --output-file added 20s overhead
-2. **Progress file polling is slow**: Even at 30s intervals added overhead
-3. **Shell redirection is fast**: Faster than direct Python file writes
-4. **Completion marker is fastest**: File existence check is faster than size check
-5. **Minimal polling is key**: Only check marker file, no reads during processing
+The fork at `rust-parakeet/parakeet-rs-fork/` patches the original parakeet-rs to support both v2 and v3 models.
 
-### Final Implementation
-- Python: stdout + marker file
-- Lua: ExecProcess + marker polling
-- Overhead: <1s on 10min files
-- Clean: All experimental code removed
+**Key change** (`src/model_tdt.rs`):
+- Original: `vocab_size: 8193` (hardcoded for v3)
+- Patched: Reads vocab_size from `vocab.txt` at runtime
+
+This allows v2 (1025 tokens) and v3 (8193 tokens) to work with the same code.
 
 ## Known Limitations
 
@@ -177,7 +124,6 @@ Download artifact from Actions tab (90 day retention).
 
 ## Environment
 
-- OS: Windows (primary), Linux/Mac (untested with executable)
+- OS: Windows, macOS (both supported)
 - REAPER version: Any with ReaImGui support
-- Python: 3.11 (for building executable)
-- Branch: `claude/local-executable-backend-01Mf5tLZS3tnEc1bUGrqbHdU`
+- Rust: stable toolchain (for building)
