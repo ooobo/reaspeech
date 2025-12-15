@@ -9,15 +9,21 @@ Tempfile = {
 }
 
 function Tempfile:name()
+  local name = os.tmpname()
+
+  -- If os.tmpname() already returned a full path, use it
   if EnvUtil.is_windows() then
-    return self:_add_name(os.getenv("TEMP") .. os.tmpname())
+    -- Absolute Windows path: C:\... or \\server\share
+    if not name:match("^[A-Za-z]:\\") and not name:match("^\\\\") then
+      local tmp = os.getenv("TEMP") or os.getenv("TMP") or "C:\\Temp"
+      name = tmp .. "\\" .. name
+    end
   else
-    -- On macOS/Linux, os.tmpname() creates an empty file, which interferes
-    -- with marker file detection. Remove it immediately to get just the name.
-    local name = os.tmpname()
+    -- Unix: os.tmpname() creates the file, remove it
     os.remove(name)
-    return self:_add_name(name)
   end
+
+  return self:_add_name(name)
 end
 
 function Tempfile:remove(name)
