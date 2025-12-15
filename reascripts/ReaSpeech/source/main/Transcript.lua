@@ -5,10 +5,10 @@
 ]]--
 
 Transcript = Polo {
-  COLUMN_ORDER = {"id", "seek", "start", "end", "raw-start", "raw-end", "text", "score", "insert file"},
+  COLUMN_ORDER = {"id", "start", "end", "text", "score", "file", "avg_logprob"},
   DEFAULT_HIDE = {
     seek = true, temperature = true, tokens = true, avg_logprob = true,
-    compression_ratio = true, no_speech_prob = true, ['raw-start'] = true, ['raw-end'] = true
+    compression_ratio = true, no_speech_prob = true
   },
 
   init = function(self)
@@ -39,7 +39,7 @@ end
 function Transcript:get_columns()
   if #self.init_data > 0 then
     -- Include virtual columns that are computed in TranscriptSegment:get()
-    local columns = {"score", "raw-start", "raw-end"}
+    local columns = {"score", "file"}
     local row = self.init_data[1]
     for k, _ in pairs(row.data) do
       if k:sub(1, 1) ~= '_' then

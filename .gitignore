@@ -9,10 +9,9 @@
 
 .venv
 /releases/*
-poetry/core/*
+
 
 .env
-
 
 # Rust build artifacts
 rust-parakeet/target/
@@ -23,3 +22,5 @@ rust-parakeet/parakeet-rs-fork/Cargo.lock
 # Binaries (built from rust-parakeet)
 parakeet-transcribe-macos
 parakeet-transcribe-windows.exe
+
+reascripts/ReaSpeech/build

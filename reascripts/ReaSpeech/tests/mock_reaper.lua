@@ -67,6 +67,21 @@ reaper = reaper or {
     return 0, ""
   end,
 
+  GetMediaItemTakeInfo_Value = function (_take, key)
+    -- Provide sensible defaults for tests: no start offset, normal playrate
+    if key == 'D_STARTOFFS' then return 0 end
+    if key == 'D_PLAYRATE' then return 1 end
+    return 0
+  end,
+
+  GetMediaItemInfo_Value = function (_item, key)
+    -- Provide sensible defaults: position 0 and a large length so segments
+    -- are considered to be on the timeline in unit tests.
+    if key == 'D_POSITION' then return 0 end
+    if key == 'D_LENGTH' then return 1000 end
+    return 0
+  end,
+
   SetProjExtState = function (proj, extname, key, value)
     if not reaper.__proj_ext_state__[proj] then
       reaper.__proj_ext_state__[proj] = {}
@@ -99,6 +114,15 @@ reaper = reaper or {
 
   ImGui_ValidatePtr = function (_pointer, _ctypename) return true end,
 
+  -- ValidatePtr2 is used by the code under test; in the real Reaper API this
+  -- checks pointer validity. For tests we treat nil or empty tables as
+  -- invalid and populated tables or userdata as valid.
+  ValidatePtr2 = function (_proj, ptr, _ctypename)
+    -- For tests, consider any non-nil pointer valid. Tests may pass
+    -- placeholder strings or tables to represent media items/takes.
+    return ptr ~= nil
+  end,
+
   ImGui_PushStyleColor = function (_context, _key, _value) end,
   ImGui_PopStyleColor = function (_context, _count) end,
 
@@ -112,6 +136,10 @@ reaper = reaper or {
   get_action_context = function ()
     local path = debug.getinfo(2, "S").source:sub(2)
     return false, path
+  end,
+
+  file_exists = function (_path)
+    return false
   end,
 
   ImGui_BeginDisabled = function(_context, _disabled) end,

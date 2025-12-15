@@ -26,7 +26,7 @@ function TranscriptSegment:init()
   assert(self.item, 'missing item')
   assert(self.take, 'missing take')
   self.data = self._copy(self.data)
-  self.data['insert file'] = self:get_file()
+  self.data['file'] = self:get_file()
   -- Store full source path for later insertion if item is deleted
   self.data['_source_path'] = self:get_source_path()
 end
@@ -331,6 +331,15 @@ function TranscriptSegment:to_table()
   end
   if self.take and reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
     result.take = ReaUtil.get_take_info(self.take, 'GUID')
+  end
+  -- Remove internal-only keys (prefixed with '_') from exported table
+  for k, _ in pairs(result) do
+    if k:sub(1,1) == '_' then result[k] = nil end
+  end
+  -- Ensure exported key is `file` (not `insert file`)
+  if result['insert file'] and not result['file'] then
+    result['file'] = result['insert file']
+    result['insert file'] = nil
   end
   return result
 end

@@ -15,8 +15,6 @@ BUNDLE_TARGET=build/ReaSpeechBundle.lua
 # e.g. $(call lua_sources,tests,Test) -> tests/Test*.lua tests/**/Test*.lua
 lua_sources=$(wildcard $(1)/$(2)*.lua) $(foreach d, $(wildcard $(1)/*), $(call lua_sources, $(d),$(2)))
 
-dest=../../app/static/reascripts/ReaSpeech
-
 SOURCES=libs ui main
 
 # All the luas!
@@ -55,7 +53,6 @@ build/ReaSpeech-5.4.luac: $(BUNDLE_TARGET)
 
 .PHONY: publish5.4
 publish5.4: build/ReaSpeech-5.4.luac
-	cp build/ReaSpeech-5.4.luac $(dest)/
 
 .PHONY: publish
 publish: publish5.4
