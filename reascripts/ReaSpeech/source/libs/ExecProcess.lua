@@ -47,7 +47,10 @@ ExecProcess = {
       --     TODO: is this safe?      --
       -- how temp can a temp file be? --
       --     more testing needed      --
-      Tempfile:remove(tempfile)
+      -- fix for REAPER hanging on BG Windows11 --
+      if timeout ~= ExecProcess.BACKGROUND then
+                Tempfile:remove(tempfile)
+               end
 
       return result
     end
