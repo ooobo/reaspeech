@@ -176,8 +176,6 @@ jobs:
         draft: false
         prerelease: false
         body: |
-          # ReaSpeech ${{ steps.version.outputs.VERSION }}
-
           Speech recognition for REAPER using Parakeet ASR.
 
           ## Installation
@@ -189,7 +187,9 @@ jobs:
           4. ReaPack will download all platform-specific files automatically
 
           ### Manual Installation
-          Download individual files for your platform from the Assets section below.
+          Download ReaSpeech.lua and the executable for your platform, 
+          move to `Scripts/` or folder of your choice, then 
+          load as a ReaScript in REAPER.
 
           ## What's New
           - See commits for detailed changes

@@ -1,5 +1,3 @@
-LUA53=lua5.3
-LUAC53=luac5.3
 LUA54=lua5.4
 LUAC54=luac5.4
 LUACHECK=luacheck
@@ -41,34 +39,26 @@ lint: $(source)
 	$(LUACHECK) $?
 
 test: $(source) $(tests)
-	true $(foreach test, $(tests), && $(LUA53) $(test) -v)
 	true $(foreach test, $(tests), && $(LUA54) $(test) -v)
 
 test-noversion: $(source) $(tests)
 	true $(foreach test, $(tests), && $(LUA) $(test) -v)
 
 .PHONY: build
-build: build/ReaSpeech-5.3.luac build/ReaSpeech-5.4.luac
+build: build/ReaSpeech-5.4.luac
 
 $(BUNDLE_TARGET): $(bundle_contents)
 	cat $(bundle_contents) > $(BUNDLE_TARGET)
 
-build/ReaSpeech-5.3.luac: $(BUNDLE_TARGET)
-	$(LUAC53) -o build/ReaSpeech-5.3.luac -s $(BUNDLE_TARGET)
-
 build/ReaSpeech-5.4.luac: $(BUNDLE_TARGET)
 	$(LUAC54) -o build/ReaSpeech-5.4.luac -s $(BUNDLE_TARGET)
-
-.PHONY: publish5.3
-publish5.3: build/ReaSpeech-5.3.luac
-	cp build/ReaSpeech-5.3.luac $(dest)/
 
 .PHONY: publish5.4
 publish5.4: build/ReaSpeech-5.4.luac
 	cp build/ReaSpeech-5.4.luac $(dest)/
 
 .PHONY: publish
-publish: publish5.3 publish5.4
+publish: publish5.4
 
 .PHONY: tags
 tags : tagged_paths = $(SOURCE_ROOT)
@@ -81,4 +71,4 @@ tags:
 
 .PHONY: clean
 clean:
-	rm -f build/ReaSpeech-5.3.luac build/ReaSpeech-5.4.luac $(BUNDLE_TARGET) TAGS
+	rm -f build/ReaSpeech-5.4.luac $(BUNDLE_TARGET) TAGS

@@ -15,7 +15,8 @@ The main aim of the fork is to target running the transcription on regular hardw
 3. Go to **Actions > ReaPack: Browse packages**
 4. Search for "ReaSpeech" and click Install
 5. ReaPack will automatically download the correct files for your platform.
-   X. To update, run **Actions > ReaPack: Synchronize packages**
+
+To update, run **Actions > ReaPack: Synchronize packages**
 
 ## Manual Installation
 
