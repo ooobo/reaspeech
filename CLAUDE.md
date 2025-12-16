@@ -50,8 +50,8 @@ REAPER → ReaSpeechAPI:transcribe()
 - `reascripts/ReaSpeech/source/ui/ASRPlugin.lua` - UI callback handler
 
 **CI/CD**:
-- `.github/workflows/build-executable.yml` - Builds Windows/macOS executables
-- `.github/workflows/release.yml` - Creates GitHub releases
+- `.github/workflows/release.yml` - Builds Windows/macOS executables and creates GitHub releases
+- `.github/workflows/check-reascripts.yml` - Lints and tests Lua code
 
 ## Building the Executable
 

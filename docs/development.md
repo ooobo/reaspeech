@@ -49,16 +49,6 @@ cd reascripts/ReaSpeech
 make
 ```
 
-### Automatic Rebuilding
-
-If you would like the ReaScripts to be automatically rebuilt whenever you make
-changes to the Lua files, you can run the following command:
-
-```sh
-# CPU version
-scripts/reawatch ReaSpeech
-```
-
 ### Build-Free ReaScript Development
 
 A "ReaSpeechDev.lua" file is provided in the "reascripts/ReaSpeech" directory.
