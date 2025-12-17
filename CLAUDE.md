@@ -7,13 +7,13 @@ ReaSpeech uses a local Rust executable (parakeet-rs) for Parakeet TDT ASR transc
 ## Current Status
 
 ### ✅ Completed
-- ✅ Rust-based transcription using parakeet-rs (fork with v2 model support)
+- ✅ Rust-based transcription using parakeet-rs 0.2.6 from crates.io
 - ✅ Modified `ReaSpeechAPI.lua` for local executable execution
 - ✅ Simplified `ReaSpeechWorker.lua` (removed HTTP polling)
 - ✅ Updated UI components (ASRControls, ASRPlugin, WhisperModels)
 - ✅ GitHub Actions workflow builds Windows and macOS executables
 - ✅ Completion marker file for reliable detection
-- ✅ Both v2 and v3 Parakeet models supported
+- ✅ Both v2 and v3 Parakeet models supported (dynamic vocab_size)
 - ✅ Int8 quantization support (smaller, faster models)
 
 ## Architecture
@@ -41,8 +41,9 @@ REAPER → ReaSpeechAPI:transcribe()
   - Arguments: audio_file, --model, --chunk-duration, --quantization, --completion-marker
   - Outputs: segments to stdout (JSON per line)
   - Timing: `Rust processing time: X.XXs` to stderr
+  - Imports: Uses `Transcriber` trait from parakeet-rs for transcription methods
 - `Cargo.toml` - Two binary targets: parakeet-transcribe-macos, parakeet-transcribe-windows
-- `parakeet-rs-fork/` - Patched parakeet-rs with dynamic vocab_size (fixes v2 model support)
+  - Uses parakeet-rs 0.2.6 from crates.io
 
 **Lua**:
 - `reascripts/ReaSpeech/source/main/ReaSpeechAPI.lua` - API wrapper
@@ -75,7 +76,7 @@ Download artifacts from Actions tab (90 day retention).
 
 ### Dependencies
 **Rust crates** (compiled into binary):
-- parakeet-rs (local fork)
+- parakeet-rs 0.2.6 (from crates.io)
 - clap, serde, serde_json
 - symphonia (native audio decoding: WAV, MP3, FLAC, AAC, OGG, etc.)
 - rubato (high-quality audio resampling)
@@ -106,15 +107,21 @@ Download artifacts from Actions tab (90 day retention).
 - Chunks processed sequentially
 - Progress shows as 50% during active job processing
 
-## parakeet-rs Fork
+## parakeet-rs 0.2.6 Updates
 
-The fork at `rust-parakeet/parakeet-rs-fork/` patches the original parakeet-rs to support both v2 and v3 models.
+We now use the official parakeet-rs 0.2.6 from crates.io (no fork needed).
 
-**Key change** (`src/model_tdt.rs`):
-- Original: `vocab_size: 8193` (hardcoded for v3)
-- Patched: Reads vocab_size from `vocab.txt` at runtime
+**Key improvements in 0.2.6**:
+- Dynamic vocab_size reading from `vocab.txt` (supports both v2 and v3 models)
+- Fixed incorrect token joining in TDT transcriber
+- Transcriber trait pattern for cleaner API
+- Updated tokenizers to 0.22.2
+- Removed C++ esaxx dependency for simpler builds
+- Dynamic linking support for ORT
 
-This allows v2 (1025 tokens) and v3 (8193 tokens) to work with the same code.
+**API changes**:
+- `transcribe_samples()` now requires importing the `Transcriber` trait
+- Usage: `use parakeet_rs::{ParakeetTDT, TimestampMode, Transcriber};`
 
 ## Known Limitations
 
