@@ -1,10 +1,31 @@
 reaper = reaper or {
   __ext_state__ = {},
   __proj_ext_state__ = {},
+  -- Per-item/take mock data for testing multi-clip scenarios
+  __item_info__ = {},
+  __take_info__ = {},
 
   __test_setUp = function ()
     reaper.__ext_state__ = {}
     reaper.__proj_ext_state__ = {}
+    reaper.__item_info__ = {}
+    reaper.__take_info__ = {}
+  end,
+
+  -- Helper to set mock item info for tests
+  __set_item_info = function (item, key, value)
+    if not reaper.__item_info__[item] then
+      reaper.__item_info__[item] = {}
+    end
+    reaper.__item_info__[item][key] = value
+  end,
+
+  -- Helper to set mock take info for tests
+  __set_take_info = function (take, key, value)
+    if not reaper.__take_info__[take] then
+      reaper.__take_info__[take] = {}
+    end
+    reaper.__take_info__[take][key] = value
   end,
 
   APIExists = function (_)
@@ -67,14 +88,22 @@ reaper = reaper or {
     return 0, ""
   end,
 
-  GetMediaItemTakeInfo_Value = function (_take, key)
+  GetMediaItemTakeInfo_Value = function (take, key)
+    -- Check if per-take mock data is set
+    if reaper.__take_info__[take] and reaper.__take_info__[take][key] ~= nil then
+      return reaper.__take_info__[take][key]
+    end
     -- Provide sensible defaults for tests: no start offset, normal playrate
     if key == 'D_STARTOFFS' then return 0 end
     if key == 'D_PLAYRATE' then return 1 end
     return 0
   end,
 
-  GetMediaItemInfo_Value = function (_item, key)
+  GetMediaItemInfo_Value = function (item, key)
+    -- Check if per-item mock data is set
+    if reaper.__item_info__[item] and reaper.__item_info__[item][key] ~= nil then
+      return reaper.__item_info__[item][key]
+    end
     -- Provide sensible defaults: position 0 and a large length so segments
     -- are considered to be on the timeline in unit tests.
     if key == 'D_POSITION' then return 0 end
