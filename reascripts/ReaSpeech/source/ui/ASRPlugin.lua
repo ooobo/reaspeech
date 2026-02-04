@@ -145,6 +145,8 @@ function ASRPlugin:handle_response(job_count)
     if job_count == 0 then
       local plugin = TranscriptUI.new { transcript = transcript }
       self.app.plugins:add_plugin(plugin)
+      -- Auto-save to project storage
+      plugin:save_to_project()
     end
   end
 end

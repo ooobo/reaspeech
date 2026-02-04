@@ -62,6 +62,22 @@ function ReaSpeechUI:init()
   self.alert_popup = AlertPopup.new {}
 
   self.react_handlers = self:get_react_handlers()
+
+  -- Load any saved transcripts from the project
+  self:load_transcripts_from_project()
+end
+
+function ReaSpeechUI:load_transcripts_from_project()
+  local saved_transcripts = TranscriptStorage:load_all_transcripts()
+
+  for _, entry in ipairs(saved_transcripts) do
+    local plugin = TranscriptUI.new {
+      transcript = entry.transcript,
+      _storage_index = entry.index,
+      _transcript_saved = true,  -- Already saved to project
+    }
+    self.plugins:add_plugin(plugin)
+  end
 end
 
 ReaSpeechUI.config_flags = function ()
