@@ -5,7 +5,7 @@ use parakeet_rs::{ParakeetTDT, TimestampMode, Transcriber};
 use rubato::{FftFixedIn, Resampler};
 use serde::Serialize;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use symphonia::core::audio::SampleBuffer;
@@ -14,6 +14,8 @@ use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
+
+mod mpeg_wav_reader;
 
 const SAMPLE_RATE: u32 = 16000;
 const OVERLAP_DURATION: f32 = 15.0;
@@ -140,26 +142,56 @@ fn ensure_model_files(model: &str, quantization: &str) -> Result<PathBuf> {
 }
 
 /// Load audio from any supported format and convert to 16kHz mono f32 samples
-/// Supports: WAV, MP3, FLAC, OGG, AAC/M4A, and more via symphonia
+/// Supports: WAV, BWF, MP3, FLAC, OGG, AAC/M4A, and more via symphonia
 fn load_audio_native(path: &Path) -> Result<Vec<f32>> {
-    let file = File::open(path).wrap_err("Failed to open audio file")?;
-    let mss = MediaSourceStream::new(Box::new(file), Default::default());
-
-    // Provide a hint about the file extension
-    let mut hint = Hint::new();
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        hint.with_extension(ext);
-    }
-
-    // Probe the file to detect format
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("unknown");
-    let unsupported_msg = format!(
-        "Cannot decode .{} files. Supported: WAV, MP3, FLAC, AAC/M4A, OGG. \
-        In REAPER, select the item and use 'Glue items' (Cmd+Shift+G) to convert it first.",
+
+    // Check for MPEG-in-WAV (common in BWF files)
+    // BWF files can contain MPEG-encoded audio which needs special handling
+    if ext.eq_ignore_ascii_case("wav") || ext.eq_ignore_ascii_case("bwf") {
+        let mut file = File::open(path).wrap_err("Failed to open audio file")?;
+        if let Some(mpeg_data) = mpeg_wav_reader::extract_mpeg_from_wav(&mut file)? {
+            eprintln!("Detected MPEG audio in WAV container, extracting...");
+            // Process the extracted MPEG data
+            let cursor = Cursor::new(mpeg_data);
+            let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
+
+            let mut hint = Hint::new();
+            hint.with_extension("mp3");
+
+            return load_audio_from_stream(mss, hint, ext);
+        }
+    }
+
+    let file = File::open(path).wrap_err("Failed to open audio file")?;
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+    // Provide a hint about the file extension
+    // Treat BWF as WAV for format detection
+    let mut hint = Hint::new();
+    let hint_ext = if ext.eq_ignore_ascii_case("bwf") {
+        "wav"
+    } else {
         ext
+    };
+    hint.with_extension(hint_ext);
+
+    load_audio_from_stream(mss, hint, ext)
+}
+
+/// Load audio from a media source stream
+fn load_audio_from_stream(
+    mss: MediaSourceStream,
+    hint: Hint,
+    original_ext: &str,
+) -> Result<Vec<f32>> {
+    let unsupported_msg = format!(
+        "Cannot decode .{} files. Supported: WAV, BWF, MP3, FLAC, AAC/M4A, OGG. \
+        In REAPER, select the item and use 'Glue items' (Cmd+Shift+G) to convert it first.",
+        original_ext
     );
     let probed = symphonia::default::get_probe()
         .format(
