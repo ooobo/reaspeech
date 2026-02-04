@@ -516,7 +516,7 @@ function TranscriptUI:insert_media_at_cursor(segment, raw_start, raw_end)
   reaper.UpdateArrange()
   reaper.UpdateTimeline()
 
-  reaper.Undo_EndBlock(string.format("Insert %s at cursor", segment:get('insert file', '')), -1)
+  reaper.Undo_EndBlock(string.format("Insert %s at cursor", segment:get('file', '')), -1)
 end
 
 function TranscriptUI:render_table()
@@ -611,7 +611,7 @@ function TranscriptUI:render_table_cell(segment, column)
     else
       ImGui.Text(Ctx(), '-')
     end
-  elseif column == 'insert file' then
+  elseif column == 'file' then
     -- Clickable file column that inserts media at cursor
     local filename = segment:get(column, "")
     local raw_start = segment:get('raw-start')
