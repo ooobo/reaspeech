@@ -1,5 +1,5 @@
 [package]
-name = "parakeet-transcribe"
+name = "parakeet-transcribe-reaspeech"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,7 +12,7 @@ name = "parakeet-transcribe-windows"
 path = "src/main.rs"
 
 [dependencies]
-parakeet-rs = "0.2.9"
+parakeet-rs = { git = "https://github.com/altunenes/parakeet-rs", rev = "01efb32"}
 clap = { version = "4.4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

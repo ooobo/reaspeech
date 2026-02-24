@@ -334,69 +334,8 @@ fn resample_audio(samples: &[f32], source_rate: u32, target_rate: u32) -> Result
     Ok(output)
 }
 
-/// Clean up text output from TDT model
-/// - Collapse repeated digits (fixes decoder looping issue)
-/// - Remove spurious periods before numbers (but keep space)
-/// - Fix spacing around punctuation
-fn clean_text(text: &str) -> String {
-    let mut result = String::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-
-    while i < chars.len() {
-        let c = chars[i];
-
-        // Handle " ." or " ," sequences
-        if c == ' ' && i + 1 < chars.len() {
-            let next = chars[i + 1];
-            // " .com" -> ".com" (space before period followed by letter)
-            if next == '.' && i + 2 < chars.len() && chars[i + 2].is_alphabetic() {
-                i += 1; // Skip the space, keep the period
-                continue;
-            }
-            // " .123" -> " 123" (space before period followed by digit - keep space, skip period)
-            if next == '.' && i + 2 < chars.len() && chars[i + 2].is_ascii_digit() {
-                result.push(' ');
-                i += 2; // Skip space and period, continue to digit
-                continue;
-            }
-        }
-
-        // Skip standalone period before digit: ".123" -> "123"
-        if (c == '.' || c == ',') && i + 1 < chars.len() && chars[i + 1].is_ascii_digit() {
-            // Only skip if at start or after space
-            if result.is_empty() || result.ends_with(' ') {
-                i += 1;
-                continue;
-            }
-        }
-
-        result.push(c);
-
-        // If this is a digit, collapse repeated identical digits (keep max 3)
-        if c.is_ascii_digit() {
-            let mut repeat_count = 1;
-            while i + 1 < chars.len() && chars[i + 1] == c && repeat_count < 3 {
-                i += 1;
-                result.push(chars[i]);
-                repeat_count += 1;
-            }
-            // Skip any remaining identical digits
-            while i + 1 < chars.len() && chars[i + 1] == c {
-                i += 1;
-            }
-        }
-
-        i += 1;
-    }
-    result.trim().to_string()
-}
-
-/// Check if a segment should be filtered out (empty or just punctuation)
-fn is_valid_segment(text: &str) -> bool {
-    let trimmed = text.trim();
-    !trimmed.is_empty() && trimmed.chars().any(|c| c.is_alphanumeric())
-}
+// Text cleaning is handled by the latest `parakeet-rs`; omit custom cleanup.
+// We perform only minimal empty-token filtering at call sites.
 
 fn transcribe_with_chunking(
     parakeet: &mut ParakeetTDT,
@@ -418,11 +357,11 @@ fn transcribe_with_chunking(
             .tokens
             .into_iter()
             .map(|t| Segment {
-                text: clean_text(&t.text),
+                text: t.text,
                 start: t.start,
                 end: t.end,
             })
-            .filter(|s| is_valid_segment(&s.text))
+            .filter(|s| !s.text.trim().is_empty())
             .collect());
     }
 
@@ -469,10 +408,10 @@ fn transcribe_with_chunking(
                 }
             }
 
-            let cleaned_text = clean_text(&token.text);
-            if is_valid_segment(&cleaned_text) {
+            let text = token.text;
+            if !text.trim().is_empty() {
                 all_segments.push(Segment {
-                    text: cleaned_text,
+                    text,
                     start: adjusted_start,
                     end: adjusted_end,
                 });
