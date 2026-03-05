@@ -51,6 +51,9 @@ function TranscriptUI:init()
   self.colorize_words = false
   self.autoplay = true
 
+  -- Storage index for project persistence (nil means not yet saved)
+  self._storage_index = self._storage_index or nil
+
   self.editing_name = false
   self.name_editor = Widgets.TextInput.new {
     default = self.transcript.name,
@@ -62,11 +65,13 @@ function TranscriptUI:init()
     on_change = function(value)
       self.transcript.name = value
       self._transcript_saved = false
+      self:save_to_project()
     end,
     on_enter = function()
       self.transcript.name = self.name_editor:value()
       self.editing_name = false
       self._transcript_saved = false
+      self:save_to_project()
     end,
   }
 
@@ -78,6 +83,7 @@ function TranscriptUI:init()
     transcript = self.transcript,
     on_save = function()
       self._transcript_saved = false
+      self:save_to_project()
     end
   }
 
@@ -146,20 +152,28 @@ function TranscriptUI:confirm_close()
   end
 
   self.confirmation_popup:show('Transcript not saved!', function()
-    ImGui.Text(Ctx(), "This transcript hasn't been saved/exported. Are you sure you want to close it?")
+    ImGui.Text(Ctx(), "This transcript hasn't been exported to a file. Are you sure you want to close it?")
+    ImGui.Text(Ctx(), "(Note: Transcript is auto-saved with the project)")
     ImGui.Separator(Ctx())
     if ImGui.Button(Ctx(), 'Cancel') then
       self.confirmation_popup:close()
     end
 
     ImGui.SameLine(Ctx())
-    if ImGui.Button(Ctx(), 'Close without Saving') then
+    if ImGui.Button(Ctx(), 'Close') then
       self.confirmation_popup:close()
       app.plugins:remove_plugin(self)
     end
 
     ImGui.SameLine(Ctx())
-    if ImGui.Button(Ctx(), 'Save') then
+    if ImGui.Button(Ctx(), 'Close & Delete') then
+      self.confirmation_popup:close()
+      self:delete_from_project()
+      app.plugins:remove_plugin(self)
+    end
+
+    ImGui.SameLine(Ctx())
+    if ImGui.Button(Ctx(), 'Export') then
       self.confirmation_popup:close()
       self.transcript_exporter.on_export = function()
         app.plugins:remove_plugin(self)
@@ -516,7 +530,7 @@ function TranscriptUI:insert_media_at_cursor(segment, raw_start, raw_end)
   reaper.UpdateArrange()
   reaper.UpdateTimeline()
 
-  reaper.Undo_EndBlock(string.format("Insert %s at cursor", segment:get('insert file', '')), -1)
+  reaper.Undo_EndBlock(string.format("Insert %s at cursor", segment:get('file', '')), -1)
 end
 
 function TranscriptUI:render_table()
@@ -611,7 +625,7 @@ function TranscriptUI:render_table_cell(segment, column)
     else
       ImGui.Text(Ctx(), '-')
     end
-  elseif column == 'insert file' then
+  elseif column == 'file' then
     -- Clickable file column that inserts media at cursor
     local filename = segment:get(column, "")
     local raw_start = segment:get('raw-start')
@@ -719,5 +733,25 @@ function TranscriptUI:sort_table()
 
   if column then
     self.transcript:sort(column, ascending)
+  end
+end
+
+-- Save transcript to project storage for persistence
+function TranscriptUI:save_to_project()
+  if not self.transcript:has_segments() then
+    return
+  end
+
+  self._storage_index = TranscriptStorage:save_transcript(
+    self.transcript,
+    self._storage_index
+  )
+end
+
+-- Delete transcript from project storage
+function TranscriptUI:delete_from_project()
+  if self._storage_index then
+    TranscriptStorage:delete_transcript(self._storage_index)
+    self._storage_index = nil
   end
 end

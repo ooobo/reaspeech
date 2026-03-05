@@ -287,7 +287,11 @@ function Transcript:sort(column, ascending)
     local a_is_nil = (a_val == nil)
     local b_is_nil = (b_val == nil)
 
-    if a_is_nil and b_is_nil then return false end
+    if a_is_nil and b_is_nil then
+      -- Both nil: use secondary sort keys for stable ordering
+      -- This ensures segments not on timeline still have consistent order
+      return self:_compare_secondary_keys(a, b, ascending)
+    end
     if a_is_nil then return false end  -- a goes to end
     if b_is_nil then return true end   -- b goes to end, a comes first
 
@@ -295,11 +299,63 @@ function Transcript:sort(column, ascending)
     if type(a_val) == 'table' then a_val = table.concat(a_val, ', ') end
     if type(b_val) == 'table' then b_val = table.concat(b_val, ', ') end
 
+    -- Apply sort direction
+    local compare_a, compare_b = a_val, b_val
     if not ascending then
-      a_val, b_val = b_val, a_val
+      compare_a, compare_b = b_val, a_val
     end
-    return a_val < b_val
+
+    -- If values are equal, use secondary sort keys for stable ordering
+    if compare_a == compare_b then
+      return self:_compare_secondary_keys(a, b, ascending)
+    end
+
+    return compare_a < compare_b
   end)
+end
+
+-- Secondary sort keys for stable ordering when primary values are equal
+-- This ensures segments from the same clip stay together and maintain consistent order
+function Transcript:_compare_secondary_keys(a, b, ascending)
+  -- First: compare by item position (groups segments by their clip on timeline)
+  local a_item_pos = self:_get_item_position(a)
+  local b_item_pos = self:_get_item_position(b)
+
+  if a_item_pos ~= b_item_pos then
+    if not ascending then
+      return a_item_pos > b_item_pos
+    end
+    return a_item_pos < b_item_pos
+  end
+
+  -- Second: compare by raw source time (consistent order within same clip)
+  local a_raw = a:get('raw-start') or 0
+  local b_raw = b:get('raw-start') or 0
+
+  if a_raw ~= b_raw then
+    if not ascending then
+      return a_raw > b_raw
+    end
+    return a_raw < b_raw
+  end
+
+  -- Third: compare by segment ID (final fallback for identical times)
+  local a_id = a:get('id') or 0
+  local b_id = b:get('id') or 0
+
+  if not ascending then
+    return a_id > b_id
+  end
+  return a_id < b_id
+end
+
+-- Get the item's position on the timeline, or a large value if invalid
+function Transcript:_get_item_position(segment)
+  if segment.item and reaper.ValidatePtr2(0, segment.item, 'MediaItem*') then
+    return reaper.GetMediaItemInfo_Value(segment.item, 'D_POSITION')
+  end
+  -- Return a large value so segments with invalid items sort to the end
+  return 999999999
 end
 
 function Transcript:to_table()

@@ -5,7 +5,7 @@ use parakeet_rs::{ParakeetTDT, TimestampMode, Transcriber};
 use rubato::{FftFixedIn, Resampler};
 use serde::Serialize;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use symphonia::core::audio::SampleBuffer;
@@ -14,6 +14,8 @@ use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
+
+mod mpeg_wav_reader;
 
 const SAMPLE_RATE: u32 = 16000;
 const OVERLAP_DURATION: f32 = 15.0;
@@ -140,26 +142,56 @@ fn ensure_model_files(model: &str, quantization: &str) -> Result<PathBuf> {
 }
 
 /// Load audio from any supported format and convert to 16kHz mono f32 samples
-/// Supports: WAV, MP3, FLAC, OGG, AAC/M4A, and more via symphonia
+/// Supports: WAV, BWF, MP3, FLAC, OGG, AAC/M4A, and more via symphonia
 fn load_audio_native(path: &Path) -> Result<Vec<f32>> {
-    let file = File::open(path).wrap_err("Failed to open audio file")?;
-    let mss = MediaSourceStream::new(Box::new(file), Default::default());
-
-    // Provide a hint about the file extension
-    let mut hint = Hint::new();
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        hint.with_extension(ext);
-    }
-
-    // Probe the file to detect format
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("unknown");
-    let unsupported_msg = format!(
-        "Cannot decode .{} files. Supported: WAV, MP3, FLAC, AAC/M4A, OGG. \
-        In REAPER, select the item and use 'Glue items' (Cmd+Shift+G) to convert it first.",
+
+    // Check for MPEG-in-WAV (common in BWF files)
+    // BWF files can contain MPEG-encoded audio which needs special handling
+    if ext.eq_ignore_ascii_case("wav") || ext.eq_ignore_ascii_case("bwf") {
+        let mut file = File::open(path).wrap_err("Failed to open audio file")?;
+        if let Some(mpeg_data) = mpeg_wav_reader::extract_mpeg_from_wav(&mut file)? {
+            eprintln!("Detected MPEG audio in WAV container, extracting...");
+            // Process the extracted MPEG data
+            let cursor = Cursor::new(mpeg_data);
+            let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
+
+            let mut hint = Hint::new();
+            hint.with_extension("mp3");
+
+            return load_audio_from_stream(mss, hint, ext);
+        }
+    }
+
+    let file = File::open(path).wrap_err("Failed to open audio file")?;
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+    // Provide a hint about the file extension
+    // Treat BWF as WAV for format detection
+    let mut hint = Hint::new();
+    let hint_ext = if ext.eq_ignore_ascii_case("bwf") {
+        "wav"
+    } else {
         ext
+    };
+    hint.with_extension(hint_ext);
+
+    load_audio_from_stream(mss, hint, ext)
+}
+
+/// Load audio from a media source stream
+fn load_audio_from_stream(
+    mss: MediaSourceStream,
+    hint: Hint,
+    original_ext: &str,
+) -> Result<Vec<f32>> {
+    let unsupported_msg = format!(
+        "Cannot decode .{} files. Supported: WAV, BWF, MP3, FLAC, AAC/M4A, OGG. \
+        In REAPER, select the item and use 'Glue items' (Cmd+Shift+G) to convert it first.",
+        original_ext
     );
     let probed = symphonia::default::get_probe()
         .format(
@@ -302,69 +334,8 @@ fn resample_audio(samples: &[f32], source_rate: u32, target_rate: u32) -> Result
     Ok(output)
 }
 
-/// Clean up text output from TDT model
-/// - Collapse repeated digits (fixes decoder looping issue)
-/// - Remove spurious periods before numbers (but keep space)
-/// - Fix spacing around punctuation
-fn clean_text(text: &str) -> String {
-    let mut result = String::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-
-    while i < chars.len() {
-        let c = chars[i];
-
-        // Handle " ." or " ," sequences
-        if c == ' ' && i + 1 < chars.len() {
-            let next = chars[i + 1];
-            // " .com" -> ".com" (space before period followed by letter)
-            if next == '.' && i + 2 < chars.len() && chars[i + 2].is_alphabetic() {
-                i += 1; // Skip the space, keep the period
-                continue;
-            }
-            // " .123" -> " 123" (space before period followed by digit - keep space, skip period)
-            if next == '.' && i + 2 < chars.len() && chars[i + 2].is_ascii_digit() {
-                result.push(' ');
-                i += 2; // Skip space and period, continue to digit
-                continue;
-            }
-        }
-
-        // Skip standalone period before digit: ".123" -> "123"
-        if (c == '.' || c == ',') && i + 1 < chars.len() && chars[i + 1].is_ascii_digit() {
-            // Only skip if at start or after space
-            if result.is_empty() || result.ends_with(' ') {
-                i += 1;
-                continue;
-            }
-        }
-
-        result.push(c);
-
-        // If this is a digit, collapse repeated identical digits (keep max 3)
-        if c.is_ascii_digit() {
-            let mut repeat_count = 1;
-            while i + 1 < chars.len() && chars[i + 1] == c && repeat_count < 3 {
-                i += 1;
-                result.push(chars[i]);
-                repeat_count += 1;
-            }
-            // Skip any remaining identical digits
-            while i + 1 < chars.len() && chars[i + 1] == c {
-                i += 1;
-            }
-        }
-
-        i += 1;
-    }
-    result.trim().to_string()
-}
-
-/// Check if a segment should be filtered out (empty or just punctuation)
-fn is_valid_segment(text: &str) -> bool {
-    let trimmed = text.trim();
-    !trimmed.is_empty() && trimmed.chars().any(|c| c.is_alphanumeric())
-}
+// Text cleaning is handled by the latest `parakeet-rs`; omit custom cleanup.
+// We perform only minimal empty-token filtering at call sites.
 
 fn transcribe_with_chunking(
     parakeet: &mut ParakeetTDT,
@@ -386,11 +357,11 @@ fn transcribe_with_chunking(
             .tokens
             .into_iter()
             .map(|t| Segment {
-                text: clean_text(&t.text),
+                text: t.text,
                 start: t.start,
                 end: t.end,
             })
-            .filter(|s| is_valid_segment(&s.text))
+            .filter(|s| !s.text.trim().is_empty())
             .collect());
     }
 
@@ -437,10 +408,10 @@ fn transcribe_with_chunking(
                 }
             }
 
-            let cleaned_text = clean_text(&token.text);
-            if is_valid_segment(&cleaned_text) {
+            let text = token.text;
+            if !text.trim().is_empty() {
                 all_segments.push(Segment {
-                    text: cleaned_text,
+                    text,
                     start: adjusted_start,
                     end: adjusted_end,
                 });

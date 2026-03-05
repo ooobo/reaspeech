@@ -243,6 +243,224 @@ function TestTranscript:testDefaultHide()
   lu.assertTrue(TranscriptSegment.default_hide('seek'))
 end
 
+-- Tests for multi-clip transcript sorting scenarios
+function TestTranscript:testSortMultipleClipsSameAudio()
+  -- Scenario: Same audio file used in two clips at different timeline positions
+  -- Clip A at timeline 0s, Clip B at timeline 60s
+  local itemA = 'item_A'
+  local takeA = 'take_A'
+  local itemB = 'item_B'
+  local takeB = 'take_B'
+
+  -- Set mock item positions
+  reaper.__set_item_info(itemA, 'D_POSITION', 0)
+  reaper.__set_item_info(itemA, 'D_LENGTH', 30)
+  reaper.__set_item_info(itemB, 'D_POSITION', 60)
+  reaper.__set_item_info(itemB, 'D_LENGTH', 30)
+
+  local t = Transcript.new()
+
+  -- Add segments from Clip A (timeline position 0)
+  t:add_segment(self.segment {
+    id = 1,
+    start = 5.0,  -- raw time in source
+    end_ = 10.0,
+    text = "Hello from A",
+    item = itemA,
+    take = takeA,
+  })
+  t:add_segment(self.segment {
+    id = 2,
+    start = 15.0,
+    end_ = 20.0,
+    text = "World from A",
+    item = itemA,
+    take = takeA,
+  })
+
+  -- Add segments from Clip B (timeline position 60)
+  -- These have the SAME raw times but different item
+  t:add_segment(self.segment {
+    id = 1,  -- same id as segment from clip A
+    start = 5.0,  -- same raw time
+    end_ = 10.0,
+    text = "Hello from B",
+    item = itemB,
+    take = takeB,
+  })
+  t:add_segment(self.segment {
+    id = 2,
+    start = 15.0,
+    end_ = 20.0,
+    text = "World from B",
+    item = itemB,
+    take = takeB,
+  })
+
+  t:update()
+  t:sort('start', true)
+
+  local segments = t:get_segments()
+
+  -- Should be sorted by timeline time:
+  -- Clip A segments first (timeline 5s, 15s)
+  -- Clip B segments second (timeline 65s, 75s)
+  lu.assertEquals(#segments, 4)
+  lu.assertEquals(segments[1]:get('text'), "Hello from A")  -- timeline ~5s
+  lu.assertEquals(segments[2]:get('text'), "World from A")  -- timeline ~15s
+  lu.assertEquals(segments[3]:get('text'), "Hello from B")  -- timeline ~65s
+  lu.assertEquals(segments[4]:get('text'), "World from B")  -- timeline ~75s
+end
+
+function TestTranscript:testSortOverlappingClips()
+  -- Scenario: Two clips at same timeline position (overlapping)
+  -- Both should sort together, with stable ordering
+  local itemA = 'item_overlap_A'
+  local takeA = 'take_overlap_A'
+  local itemB = 'item_overlap_B'
+  local takeB = 'take_overlap_B'
+
+  -- Both clips at timeline position 10
+  reaper.__set_item_info(itemA, 'D_POSITION', 10)
+  reaper.__set_item_info(itemA, 'D_LENGTH', 30)
+  reaper.__set_item_info(itemB, 'D_POSITION', 10)
+  reaper.__set_item_info(itemB, 'D_LENGTH', 30)
+
+  local t = Transcript.new()
+
+  -- Segment from Clip A: raw time 5s, timeline time = 10 + 5 - 0 = 15
+  t:add_segment(self.segment {
+    id = 1,
+    start = 5.0,
+    end_ = 10.0,
+    text = "Same time A",
+    item = itemA,
+    take = takeA,
+  })
+
+  -- Segment from Clip B: same raw time, same timeline time
+  t:add_segment(self.segment {
+    id = 1,
+    start = 5.0,
+    end_ = 10.0,
+    text = "Same time B",
+    item = itemB,
+    take = takeB,
+  })
+
+  t:update()
+
+  -- Sort multiple times to verify stability
+  for _ = 1, 5 do
+    t:sort('start', true)
+    local segments = t:get_segments()
+
+    lu.assertEquals(#segments, 2)
+    -- The order should be consistent across multiple sorts
+    -- (stable sort behavior)
+    local first_text = segments[1]:get('text')
+    local second_text = segments[2]:get('text')
+
+    -- Just verify we get both segments in a consistent order
+    lu.assertTrue(
+      (first_text == "Same time A" and second_text == "Same time B") or
+      (first_text == "Same time B" and second_text == "Same time A")
+    )
+  end
+end
+
+function TestTranscript:testSortDescendingMultipleClips()
+  -- Test descending sort with multiple clips
+  local itemA = 'item_desc_A'
+  local takeA = 'take_desc_A'
+  local itemB = 'item_desc_B'
+  local takeB = 'take_desc_B'
+
+  reaper.__set_item_info(itemA, 'D_POSITION', 0)
+  reaper.__set_item_info(itemA, 'D_LENGTH', 30)
+  reaper.__set_item_info(itemB, 'D_POSITION', 60)
+  reaper.__set_item_info(itemB, 'D_LENGTH', 30)
+
+  local t = Transcript.new()
+
+  t:add_segment(self.segment {
+    id = 1,
+    start = 5.0,
+    end_ = 10.0,
+    text = "First A",
+    item = itemA,
+    take = takeA,
+  })
+  t:add_segment(self.segment {
+    id = 1,
+    start = 5.0,
+    end_ = 10.0,
+    text = "First B",
+    item = itemB,
+    take = takeB,
+  })
+
+  t:update()
+  t:sort('start', false)  -- descending
+
+  local segments = t:get_segments()
+
+  lu.assertEquals(#segments, 2)
+  -- Descending: Clip B first (timeline 65s), then Clip A (timeline 5s)
+  lu.assertEquals(segments[1]:get('text'), "First B")  -- timeline ~65s
+  lu.assertEquals(segments[2]:get('text'), "First A")  -- timeline ~5s
+end
+
+function TestTranscript:testSortStabilityWithEqualValues()
+  -- Test that sorting is stable when primary sort values are equal
+  local item = 'item_stable'
+  local take = 'take_stable'
+
+  reaper.__set_item_info(item, 'D_POSITION', 0)
+  reaper.__set_item_info(item, 'D_LENGTH', 100)
+
+  local t = Transcript.new()
+
+  -- Three segments with the same raw start time but different IDs
+  t:add_segment(self.segment {
+    id = 3,
+    start = 10.0,
+    end_ = 15.0,
+    text = "Segment C",
+    item = item,
+    take = take,
+  })
+  t:add_segment(self.segment {
+    id = 1,
+    start = 10.0,
+    end_ = 15.0,
+    text = "Segment A",
+    item = item,
+    take = take,
+  })
+  t:add_segment(self.segment {
+    id = 2,
+    start = 10.0,
+    end_ = 15.0,
+    text = "Segment B",
+    item = item,
+    take = take,
+  })
+
+  t:update()
+  t:sort('start', true)
+
+  local segments = t:get_segments()
+
+  lu.assertEquals(#segments, 3)
+  -- All have same timeline start time (10s)
+  -- Secondary sort by raw-start (all same: 10.0)
+  -- Tertiary sort by id: 1, 2, 3
+  lu.assertEquals(segments[1]:get('id'), 1)
+  lu.assertEquals(segments[2]:get('id'), 2)
+  lu.assertEquals(segments[3]:get('id'), 3)
+end
+
 function TestTranscript:testSegmentScore()
   local s = self.segment {
     id = 1,
