@@ -100,19 +100,7 @@ jobs:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         mkdir -p parakeet-binaries
-
-        # Get the latest release info from ooobo/parakeet-transcribe
-        RELEASE_INFO=$(curl -s https://api.github.com/repos/ooobo/parakeet-transcribe/releases/latest)
-        RELEASE_TAG=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
-        echo "Fetching parakeet-transcribe binaries from release: $RELEASE_TAG"
-
-        # Download all release assets
-        ASSETS=$(echo "$RELEASE_INFO" | jq -r '.assets[] | "\(.name) \(.browser_download_url)"')
-        while IFS=' ' read -r name url; do
-          echo "Downloading $name..."
-          curl -sL -o "parakeet-binaries/$name" "$url"
-        done <<< "$ASSETS"
-
+        gh release download --repo ooobo/parakeet-transcribe --pattern '*.exe' --pattern 'parakeet-transcribe-macos' --dir parakeet-binaries || true
         echo "Downloaded binaries:"
         ls -lah parakeet-binaries/
 
