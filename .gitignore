@@ -19,8 +19,8 @@ rust-parakeet/Cargo.lock
 rust-parakeet/patches/
 rust-parakeet/parakeet-rs-fork/Cargo.lock
 
-# Binaries (built from rust-parakeet)
+# Binaries
 parakeet-transcribe-macos
-parakeet-transcribe-windows.exe
+parakeet-transcribe.exe
 
 reascripts/ReaSpeech/build

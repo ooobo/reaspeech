@@ -64,7 +64,7 @@ function ReaSpeechAPI:find_executable(custom_path)
   -- Look in same directory as script
   local executable_name
   if EnvUtil.is_windows() then
-    executable_name = "parakeet-transcribe-windows.exe"
+    executable_name = "parakeet-transcribe.exe"
   elseif EnvUtil.is_mac() then
     executable_name = "parakeet-transcribe-macos"
   else
@@ -132,6 +132,9 @@ function ReaSpeechAPI:transcribe(audio_file, options)
     table.insert(command_parts, "--model")
     table.insert(command_parts, model)
   end
+
+  -- Add JSON output flag
+  table.insert(command_parts, "--json")
 
   -- Add completion marker argument
   table.insert(command_parts, "--completion-marker")

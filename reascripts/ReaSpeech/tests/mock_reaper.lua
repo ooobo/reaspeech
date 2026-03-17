@@ -99,6 +99,18 @@ reaper = reaper or {
     return 0
   end,
 
+  CountMediaItems = function (_proj)
+    return 0
+  end,
+
+  GetMediaItem = function (_proj, _idx)
+    return nil
+  end,
+
+  GetMediaItemTakeByGUID = function (_proj, _guid)
+    return nil
+  end,
+
   GetMediaItemInfo_Value = function (item, key)
     -- Check if per-item mock data is set
     if reaper.__item_info__[item] and reaper.__item_info__[item][key] ~= nil then
@@ -150,6 +162,20 @@ reaper = reaper or {
     -- For tests, consider any non-nil pointer valid. Tests may pass
     -- placeholder strings or tables to represent media items/takes.
     return ptr ~= nil
+  end,
+
+  GetSetMediaItemInfo_String = function (_item, param, _value, _is_set)
+    if param == 'GUID' then
+      return true, '{mock-item-guid}'
+    end
+    return false, ''
+  end,
+
+  GetSetMediaItemTakeInfo_String = function (_take, param, _value, _is_set)
+    if param == 'GUID' then
+      return true, '{mock-take-guid}'
+    end
+    return false, ''
   end,
 
   ImGui_PushStyleColor = function (_context, _key, _value) end,

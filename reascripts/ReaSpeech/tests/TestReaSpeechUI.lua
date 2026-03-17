@@ -46,6 +46,7 @@ require('ui/widgets/TextInput')
 require('main/ReaSpeechAPI')
 require('main/ReaSpeechWorker')
 require('main/Transcript')
+require('main/TranscriptStorage')
 
 --
 
