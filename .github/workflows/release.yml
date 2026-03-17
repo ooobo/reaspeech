@@ -12,7 +12,7 @@ on:
         default: 'v1.0.0'
 
 jobs:
-  build-windows:
+  build-bundle:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
@@ -27,14 +27,6 @@ jobs:
         }
         echo "VERSION=$VERSION" >> $env:GITHUB_OUTPUT
         Write-Host "Version: $VERSION"
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Build release binary
-      working-directory: rust-parakeet
-      run: |
-        cargo build --release --bin parakeet-transcribe-windows
 
     - name: Build ReaSpeech bundle
       run: |
@@ -74,37 +66,16 @@ jobs:
         "" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
         Get-Content "build/ReaSpeechBundle.lua" | Add-Content -Path "build/ReaSpeech.lua" -Encoding UTF8
 
-    - name: Upload Windows artifacts
+    - name: Upload bundle artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: windows-release-files
+        name: bundle-files
         path: |
           reascripts/ReaSpeech/build/ReaSpeech.lua
-          rust-parakeet/target/release/parakeet-transcribe-windows.exe
           reascripts/ReaSpeech/resources/
 
-  build-macos:
-    runs-on: macos-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Build release binary
-      working-directory: rust-parakeet
-      run: |
-        cargo build --release --bin parakeet-transcribe-macos
-
-    - name: Upload macOS artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: macos-release-files
-        path: |
-          rust-parakeet/target/release/parakeet-transcribe-macos
-
   create-release:
-    needs: [build-windows, build-macos]
+    needs: [build-bundle]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -118,44 +89,54 @@ jobs:
           echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
         fi
 
-    - name: Download Windows artifacts
+    - name: Download bundle artifacts
       uses: actions/download-artifact@v4
       with:
-        name: windows-release-files
-        path: windows-files
+        name: bundle-files
+        path: bundle-files
 
-    - name: Download macOS artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: macos-release-files
-        path: macos-files
+    - name: Download latest parakeet-transcribe binaries
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        mkdir -p parakeet-binaries
+
+        # Get the latest release info from ooobo/parakeet-transcribe
+        RELEASE_INFO=$(curl -s https://api.github.com/repos/ooobo/parakeet-transcribe/releases/latest)
+        RELEASE_TAG=$(echo "$RELEASE_INFO" | jq -r '.tag_name')
+        echo "Fetching parakeet-transcribe binaries from release: $RELEASE_TAG"
+
+        # Download all release assets
+        ASSETS=$(echo "$RELEASE_INFO" | jq -r '.assets[] | "\(.name) \(.browser_download_url)"')
+        while IFS=' ' read -r name url; do
+          echo "Downloading $name..."
+          curl -sL -o "parakeet-binaries/$name" "$url"
+        done <<< "$ASSETS"
+
+        echo "Downloaded binaries:"
+        ls -lah parakeet-binaries/
 
     - name: Debug - List artifact contents
       run: |
-        echo "=== Windows files ==="
-        find windows-files -type f -o -type d
+        echo "=== Bundle files ==="
+        find bundle-files -type f -o -type d
         echo ""
-        echo "=== macOS files ==="
-        find macos-files -type f -o -type d
+        echo "=== Parakeet binaries ==="
+        ls -lah parakeet-binaries/
 
     - name: Prepare release assets
       run: |
         mkdir -p release-assets
 
-        # Find and copy files (handles both preserved and flattened paths)
+        # Main script (from bundle build)
+        find bundle-files -name "ReaSpeech.lua" -type f -exec cp {} release-assets/ \;
 
-        # Main script (from Windows build)
-        find windows-files -name "ReaSpeech.lua" -type f -exec cp {} release-assets/ \;
-
-        # Windows executable
-        find windows-files -name "parakeet-transcribe-windows.exe" -type f -exec cp {} release-assets/ \;
-
-        # macOS executable
-        find macos-files -name "parakeet-transcribe-macos" -type f -exec cp {} release-assets/ \;
-        chmod +x release-assets/parakeet-transcribe-macos
+        # Parakeet binaries from external repo
+        [ -f parakeet-binaries/parakeet-transcribe.exe ] && cp parakeet-binaries/parakeet-transcribe.exe release-assets/
+        [ -f parakeet-binaries/parakeet-transcribe-macos ] && cp parakeet-binaries/parakeet-transcribe-macos release-assets/ && chmod +x release-assets/parakeet-transcribe-macos
 
         # Resources (find the resources directory)
-        RESOURCES_DIR=$(find windows-files -type d -name "resources" | head -1)
+        RESOURCES_DIR=$(find bundle-files -type d -name "resources" | head -1)
         if [ -n "$RESOURCES_DIR" ]; then
           cp -r "$RESOURCES_DIR" release-assets/
 
@@ -187,15 +168,15 @@ jobs:
           4. ReaPack will download all platform-specific files automatically
 
           ### Manual Installation
-          Download ReaSpeech.lua and the executable for your platform, 
-          move to `Scripts/` or folder of your choice, then 
+          Download ReaSpeech.lua and the executable for your platform,
+          move to `Scripts/` or folder of your choice, then
           load as a ReaScript in REAPER.
 
           ## What's New
           - See commits for detailed changes
         files: |
           release-assets/ReaSpeech.lua
-          release-assets/parakeet-transcribe-windows.exe
+          release-assets/parakeet-transcribe.exe
           release-assets/parakeet-transcribe-macos
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -212,7 +193,7 @@ jobs:
           <version name="${VERSION_NAME}" author="ooobo" time="${TIMESTAMP}">
             <changelog><![CDATA[Release ${VERSION}]]></changelog>
             <source main="main">${REPO_URL}/ReaSpeech.lua</source>
-            <source platform="windows" file="parakeet-transcribe-windows.exe">${REPO_URL}/parakeet-transcribe-windows.exe</source>
+            <source platform="windows" file="parakeet-transcribe.exe">${REPO_URL}/parakeet-transcribe.exe</source>
             <source platform="darwin" file="parakeet-transcribe-macos">${REPO_URL}/parakeet-transcribe-macos</source>
           </version>
         ENDVERSION
@@ -220,7 +201,7 @@ jobs:
         # Insert after </metadata> tag
         sed -i '/<\/metadata>/r /tmp/new_version.xml' index.xml
 
-        echo "✓ Added version ${VERSION_NAME} to index.xml"
+        echo "Added version ${VERSION_NAME} to index.xml"
         cat index.xml
 
     - name: Commit and push index.xml
