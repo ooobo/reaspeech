@@ -2,7 +2,7 @@
 
 ### Painless speech-to-text transcription inside of REAPER
 
-This is a fork of [ReaSpeech](https://github.com/TeamAudio/reaspeech). Main differences are docker-based transcription service was replaced with a standalone executable based on [parakeet-rs](https://github.com/altunenes/parakeet-rs), a few improvements to the transcript display, and simple insertion of the raw audio.
+This is a fork of [ReaSpeech](https://github.com/TeamAudio/reaspeech). Main differences are docker-based transcription service was replaced with a standalone executable based on [parakeet-rs](https://github.com/altunenes/parakeet-rs) (built from [ooobo/parakeet-transcribe](https://github.com/ooobo/parakeet-transcribe)), a few improvements to the transcript display, and simple insertion of the raw audio.
 
 The main aim of the fork is to target running the transcription on regular hardware without CPU. Parakeet TDT v2 is state of the art for English ASR in speed/accuracy, in most tests without a GPU transcribed 1 hour of audio in about 3-5mins.
 

@@ -57,17 +57,46 @@ enabling you to make changes to the Lua files and see the changes reflected in
 REAPER without having to rebuild the ReaScripts. To use this file, add it as
 an action in REAPER.
 
-### Building transcription executables
+### Transcription executable
 
-Requires rust compiler. Navigate to "rust-parakeet".
-**Windows:** cargo build --release --bin parakeet-transcribe-windows
-**Mac:** cargo build --release --bin parakeet-transcribe-macos
-These executables must be in same folder as ReaSpeech.lua script.
+The Rust transcription executable is maintained in a separate repository:
+[ooobo/parakeet-transcribe](https://github.com/ooobo/parakeet-transcribe)
 
-### To push a release
+To build locally, clone that repo and run:
+- **Windows:** `cargo build --release --bin parakeet-transcribe-windows`
+- **macOS:** `cargo build --release --bin parakeet-transcribe-macos`
 
-1. Add commits to beta branch
-2. `git tag v0.7.1-fork##`
-3. `git push origin v0.7.1-fork##`
+The compiled binary must be placed in the same folder as `ReaSpeech.lua`.
 
-GitHub Actions will create the release, update index.xml for ReaPack repository at (https://github.com/ooobo/reaspeech/raw/beta/index.xml) to pick up.
+For releases, pre-built binaries are automatically downloaded from
+`ooobo/parakeet-transcribe` by the GitHub Actions workflow.
+
+### Creating a release
+
+Releases are built by GitHub Actions and published to the
+[ReaPack repository](https://github.com/ooobo/reaspeech/raw/beta/index.xml).
+
+**Steps:**
+
+1. Make sure all changes are committed and pushed to the `beta` branch.
+2. Ensure `ooobo/parakeet-transcribe` has a GitHub Release with current
+   Windows (`.exe`) and macOS binaries. The release workflow downloads the
+   latest binaries from that repo automatically.
+3. Choose a version tag, incrementing the number from the last release:
+   ```sh
+   git tag v0.7.1-fork9
+   ```
+4. Push the tag to trigger the release workflow:
+   ```sh
+   git push origin v0.7.1-fork9
+   ```
+5. GitHub Actions will:
+   - Bundle all Lua source files into `ReaSpeech.lua`
+   - Download `parakeet-transcribe.exe` and `parakeet-transcribe-macos`
+     from `ooobo/parakeet-transcribe`
+   - Create a GitHub Release with the bundled script and binaries
+   - Update `index.xml` and push it to the `beta` branch
+6. ReaPack users receive the update via **Extensions > ReaPack > Synchronize packages**.
+
+**Alternative:** You can also trigger a release manually from the GitHub
+Actions tab using "Run workflow" and providing a version tag (e.g. `v0.7.1-fork9`).
