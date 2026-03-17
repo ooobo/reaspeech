@@ -13,12 +13,6 @@
 
 .env
 
-# Rust build artifacts
-rust-parakeet/target/
-rust-parakeet/Cargo.lock
-rust-parakeet/patches/
-rust-parakeet/parakeet-rs-fork/Cargo.lock
-
 # Binaries
 parakeet-transcribe-macos
 parakeet-transcribe.exe
