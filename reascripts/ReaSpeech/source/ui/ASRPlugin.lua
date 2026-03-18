@@ -52,7 +52,6 @@ function ASRPlugin:asr(jobs)
   end
 
   local request = {
-    request_type = 'transcribe',
     options = options,
     jobs = consolidated_jobs,
     callback = self:handle_response(#consolidated_jobs)

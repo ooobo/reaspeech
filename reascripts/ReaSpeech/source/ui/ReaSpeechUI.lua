@@ -50,7 +50,6 @@ function ReaSpeechUI:init()
 
   self.plugins = ReaSpeechPlugins.new(self, {
     ASRPlugin,
-    -- DetectLanguagePlugin,
     TranscriptUI.plugin(),
   })
 
