@@ -2,8 +2,6 @@
 
   ReaSpeechWorker.lua - Speech transcription worker
 
-  Modified to use local executable instead of HTTP/Docker backend
-
 ]]--
 
 ReaSpeechWorker = Polo {}
@@ -146,7 +144,6 @@ function ReaSpeechWorker:expand_jobs_from_request(request)
         job = job,
         audio_file = job.path,
         options = request.options or {},
-        request_type = request.request_type or 'transcribe',
         callback = request.callback
       })
     end
@@ -171,21 +168,11 @@ function ReaSpeechWorker:handle_job_completion(active_job)
 end
 
 function ReaSpeechWorker:handle_response(active_job, response)
-  local request_type = active_job.request_type or 'transcribe'
-
-  if request_type == 'detect_language' then
-    -- For detect_language, response is already in the correct format
-    response._job = active_job.job
-    response.callback = active_job.callback
-    table.insert(self.responses, response)
-  else
-    -- For transcribe, wrap response in array to match expected format from HTTP API
-    -- The UI expects response[1].segments
-    local wrapped_response = { response }
-    wrapped_response._job = active_job.job
-    wrapped_response.callback = active_job.callback
-    table.insert(self.responses, wrapped_response)
-  end
+  -- Wrap response in array - the UI expects response[1].segments
+  local wrapped_response = { response }
+  wrapped_response._job = active_job.job
+  wrapped_response.callback = active_job.callback
+  table.insert(self.responses, wrapped_response)
 end
 
 function ReaSpeechWorker:handle_error(_active_job, error_message)
@@ -198,21 +185,11 @@ function ReaSpeechWorker:start_active_job()
   end
 
   local active_job = self.active_job
-  local request_type = active_job.request_type or 'transcribe'
 
-  -- Start process based on request type
-  if request_type == 'detect_language' then
-    active_job.process = ReaSpeechAPI:detect_language(
-      active_job.audio_file,
-      active_job.options
-    )
-  else
-    -- Default to transcription
-    active_job.process = ReaSpeechAPI:transcribe(
-      active_job.audio_file,
-      active_job.options
-    )
-  end
+  active_job.process = ReaSpeechAPI:transcribe(
+    active_job.audio_file,
+    active_job.options
+  )
 end
 
 function ReaSpeechWorker:check_active_job()

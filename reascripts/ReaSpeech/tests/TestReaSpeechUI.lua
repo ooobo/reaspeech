@@ -32,7 +32,6 @@ require('ui/TranscriptEditor')
 require('ui/TranscriptExporter')
 require('ui/TranscriptImporter')
 require('ui/TranscriptUI')
-require('ui/WhisperLanguages')
 require('ui/Widgets')
 require('ui/widgets/Button')
 require('ui/widgets/ButtonBar')
@@ -55,7 +54,6 @@ TestReaSpeechUI = {}
 function TestReaSpeechUI:setUp()
   reaper.__test_setUp()
   Script = {
-    host = "localhost:9000",
     executable_path = nil  -- Let ReaSpeechAPI auto-detect
   }
   self.app = ReaSpeechUI.new()

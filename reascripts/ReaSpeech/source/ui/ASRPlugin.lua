@@ -5,7 +5,6 @@
 ]]--
 
 ASRPlugin = Plugin {
-  ENDPOINT = '/asr',
   PLUGIN_KEY = 'asr',
 }
 
@@ -27,18 +26,9 @@ end
 function ASRPlugin:asr(jobs)
   local controls_data = self._controls:get_request_data()
 
-  -- Build options for local executable
   local options = {
     model = controls_data.model_name,
-    word_timestamps = true,
   }
-
-  if controls_data.language and controls_data.language ~= '' then
-    options.language = controls_data.language
-  end
-
-  -- Note: Some options like vad_filter, hotwords, initial_prompt, and translate
-  -- are for Whisper, not supported by onnx-asr local executable
 
   -- consolidate jobs by path, retaining a collection of
   -- { item: MediaItem, take: MediaItem_Take } objects
@@ -62,7 +52,6 @@ function ASRPlugin:asr(jobs)
   end
 
   local request = {
-    request_type = 'transcribe',
     options = options,
     jobs = consolidated_jobs,
     callback = self:handle_response(#consolidated_jobs)

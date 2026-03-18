@@ -2,39 +2,24 @@
 
   ReaSpeechAPI.lua - ReaSpeech API client
 
-  Modified to use local executable instead of HTTP/Docker backend
+  Uses local parakeet-transcribe executable for ASR transcription
 
 ]]--
 
 ReaSpeechAPI = {
   executable_path = nil,
-  python_cmd = nil,
-  is_standalone = false,
 }
 
 function ReaSpeechAPI:init(executable_path)
   Logging().init(self, 'ReaSpeechAPI')
 
-  self.executable_path, self.is_standalone = self:find_executable(executable_path)
-  self.python_cmd = self:get_python_command()
+  self.executable_path = self:find_executable(executable_path)
 
-  -- Log which executable mode we're using
-  if self.is_standalone then
-    self:log("Using standalone executable: " .. self.executable_path)
+  if self.executable_path then
+    self:log("Using executable: " .. self.executable_path)
   else
-    self:log("Using Python script: " .. self.executable_path)
-    self:log("Python command: " .. self.python_cmd)
-  end
-end
-
-function ReaSpeechAPI:get_python_command()
-  -- Try to find Python 3
-  if EnvUtil.is_windows() then
-    -- On Windows, try python, python3, py -3
-    return "python"
-  else
-    -- On Unix-like systems, try python3 first
-    return "python3"
+    self:log("ERROR: parakeet-transcribe executable not found!")
+    self:log("Expected location: same directory as the script")
   end
 end
 
@@ -52,16 +37,14 @@ end
 function ReaSpeechAPI:find_executable(custom_path)
   -- If custom path provided, use it
   if custom_path then
-    local is_standalone = not custom_path:match("%.py$")
-    return custom_path, is_standalone
+    return custom_path
   end
 
   -- Get the script directory
   local script_path = ({reaper.get_action_context()})[2]
   local script_dir = script_path:match("(.-)([^/\\]+)$")
 
-  -- Check for standalone executable first (platform-specific)
-  -- Look in same directory as script
+  -- Determine platform-specific executable name
   local executable_name
   if EnvUtil.is_windows() then
     executable_name = "parakeet-transcribe.exe"
@@ -71,30 +54,16 @@ function ReaSpeechAPI:find_executable(custom_path)
     executable_name = "parakeet-transcribe-linux"
   end
 
+  -- Check in same directory as script (ReaPack install location)
   local executable_path = script_dir .. executable_name
   if reaper.file_exists(executable_path) then
-    -- Ensure executables have execute permission (needed for ReaPack installs)
     self:ensure_executable(executable_path)
-    return executable_path, true
+    return executable_path
   end
 
-  -- Fall back to development location (python/dist/)
-  local dev_executable_path = script_dir .. "python/dist/" .. executable_name
-  if reaper.file_exists(dev_executable_path) then
-    self:ensure_executable(dev_executable_path)
-    return dev_executable_path, true
-  end
-
-  -- Fall back to Python script
-  local python_script_path = script_dir .. "python/parakeet_transcribe.py"
-  return python_script_path, false
-end
-
-function ReaSpeechAPI:get_default_executable_path()
-  -- Deprecated: use find_executable instead
-  local script_path = ({reaper.get_action_context()})[2]
-  local script_dir = script_path:match("(.-)([^/\\]+)$")
-  return script_dir .. "python/parakeet_transcribe.py"
+  -- Not found
+  self:log("Executable not found")
+  return nil
 end
 
 function ReaSpeechAPI:quote_path(path)
@@ -108,6 +77,13 @@ end
 -- Execute transcription on an audio file
 -- Returns a simple process object that can be polled for results
 function ReaSpeechAPI:transcribe(audio_file, options)
+  if not self.executable_path then
+    if options.error_handler then
+      options.error_handler("parakeet-transcribe executable not found")
+    end
+    return nil
+  end
+
   local model = options.model or "nemo-parakeet-tdt-0.6b-v2"
 
   -- Create temp files for redirection and completion marker
@@ -115,16 +91,10 @@ function ReaSpeechAPI:transcribe(audio_file, options)
   local stderr_file = Tempfile:name()
   local marker_file = Tempfile:name()
 
-  -- Build command differently for standalone executable vs Python script
+  -- Build command
   local command_parts = {}
 
-  if self.is_standalone then
-    table.insert(command_parts, self:quote_path(self.executable_path))
-  else
-    table.insert(command_parts, self.python_cmd)
-    table.insert(command_parts, self:quote_path(self.executable_path))
-  end
-
+  table.insert(command_parts, self:quote_path(self.executable_path))
   table.insert(command_parts, self:quote_path(audio_file))
 
   -- Only add --model if it's not the default
@@ -245,69 +215,6 @@ function ReaSpeechAPI:transcribe(audio_file, options)
         return 100
       end
       return 50
-    end
-  }
-end
-
--- Detect language of an audio file
--- Note: Parakeet doesn't support language detection
--- This is a placeholder for future implementation
-function ReaSpeechAPI:detect_language(_audio_file, options)
-  local output_file = Tempfile:name()
-  local command = "echo '{\"language\": \"en\"}' > " .. self:quote_path(output_file)
-
-  local result = ExecProcess.new(command):background()
-
-  if not result then
-    if options.error_handler then
-      options.error_handler("Unable to start background process")
-    end
-    return nil
-  end
-
-  return {
-    output_file = output_file,
-    complete = false,
-    error_msg = nil,
-    language = nil,
-
-    ready = function(self)
-      if self.complete then
-        return true
-      end
-
-      local f = io.open(self.output_file, 'r')
-      if f then
-        local content = f:read("*all")
-        f:close()
-        if #content > 0 then
-          self.complete = true
-          local success, data = pcall(function()
-            return json.decode(content)
-          end)
-          if success and data then
-            self.language = data.language
-          end
-          Tempfile:remove(self.output_file)
-          return true
-        end
-      end
-      return false
-    end,
-
-    error = function(self)
-      return self.error_msg
-    end,
-
-    result = function(self)
-      if not self.complete then
-        return nil
-      end
-      return { language = self.language or "en" }
-    end,
-
-    progress = function(self)
-      return self.complete and 100 or 50
     end
   }
 end
