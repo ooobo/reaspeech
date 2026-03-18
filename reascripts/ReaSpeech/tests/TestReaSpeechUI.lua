@@ -55,7 +55,6 @@ TestReaSpeechUI = {}
 function TestReaSpeechUI:setUp()
   reaper.__test_setUp()
   Script = {
-    host = "localhost:9000",
     executable_path = nil  -- Let ReaSpeechAPI auto-detect
   }
   self.app = ReaSpeechUI.new()

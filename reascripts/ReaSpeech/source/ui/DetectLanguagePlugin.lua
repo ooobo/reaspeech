@@ -35,7 +35,6 @@ function DetectLanguagePlugin:handle_response()
     local job = response._job
     local track = reaper.GetMediaItemTake_Track(job.take)
     local guid = reaper.GetTrackGUID(track)
-    -- Note: Python script returns 'language' not 'language_code'
     local language_code = response.language
 
     if not seen[guid] then
