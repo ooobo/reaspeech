@@ -27,9 +27,10 @@ vendor:=$(foreach lib, $(VENDOR), vendor/$(lib))
 images:=$(wildcard resources/images/*.lua)
 sources:=$(foreach s, $(SOURCES), $(call lua_sources, $(SOURCE_ROOT)/$(s)))
 version:=version.lua
+script:=$(BUNDLE_INCLUDE)/script.lua
 main:=$(BUNDLE_INCLUDE)/main.lua
 
-bundle_contents:=$(headers) $(vendor) $(images) $(sources) $(version) $(main)
+bundle_contents:=$(headers) $(vendor) $(images) $(sources) $(version) $(script) $(main)
 
 all: lint test publish
 

@@ -44,14 +44,8 @@ for _, source_dir in pairs({'../vendor', '../resources', 'libs', 'ui', 'main'}) 
   recursive_dofile(script_path .. 'source/' .. source_dir)
 end
 
--- Local executable backend (no Docker needed!)
-Script = {
-  name = "ReaSpeechDev",
-  executable_path = nil, -- Will use default path relative to script
-  env = "production",
-  lua = _VERSION:match('[%d.]+'),
-  timeout = 30000,
-}
+dofile(script_path .. 'source/include/script.lua')
+Script.name = "ReaSpeechDev"
 
 dofile(script_path .. 'source/include/main.lua')
 

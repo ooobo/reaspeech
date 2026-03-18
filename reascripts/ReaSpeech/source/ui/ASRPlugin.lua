@@ -65,6 +65,8 @@ function ASRPlugin:handle_response(job_count)
     name = self.new_transcript_name(),
   }
 
+  local plugin = nil
+
   return function(response)
     if not response[1] or not response[1].segments then
       return
@@ -129,14 +131,16 @@ function ASRPlugin:handle_response(job_count)
     -- Sort by start time ascending by default for most useful view
     transcript:sort('start', true)
 
+    -- Show transcript UI on first result, update incrementally after
+    if not plugin then
+      plugin = TranscriptUI.new { transcript = transcript }
+      self.app.plugins:add_plugin(plugin)
+    end
+
     job_count = job_count - 1
 
-    if job_count == 0 then
-      local plugin = TranscriptUI.new { transcript = transcript }
-      self.app.plugins:add_plugin(plugin)
-      -- Auto-save to project storage
-      plugin:save_to_project()
-    end
+    -- Save to project after each file, so progress is persisted
+    plugin:save_to_project()
   end
 end
 
