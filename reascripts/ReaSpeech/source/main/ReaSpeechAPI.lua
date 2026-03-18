@@ -56,7 +56,6 @@ function ReaSpeechAPI:find_executable(custom_path)
 
   -- Check in same directory as script (ReaPack install location)
   local executable_path = script_dir .. executable_name
-  self:log("Looking for executable: " .. executable_path)
   if reaper.file_exists(executable_path) then
     self:ensure_executable(executable_path)
     return executable_path

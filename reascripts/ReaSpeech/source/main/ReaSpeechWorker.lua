@@ -2,8 +2,6 @@
 
   ReaSpeechWorker.lua - Speech transcription worker
 
-  Modified to use local executable instead of HTTP/Docker backend
-
 ]]--
 
 ReaSpeechWorker = Polo {}
@@ -179,8 +177,7 @@ function ReaSpeechWorker:handle_response(active_job, response)
     response.callback = active_job.callback
     table.insert(self.responses, response)
   else
-    -- For transcribe, wrap response in array to match expected format from HTTP API
-    -- The UI expects response[1].segments
+    -- Wrap response in array - the UI expects response[1].segments
     local wrapped_response = { response }
     wrapped_response._job = active_job.job
     wrapped_response.callback = active_job.callback

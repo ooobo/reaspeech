@@ -4,9 +4,7 @@
 
 ]]--
 
-DetectLanguagePlugin = Plugin {
-  ENDPOINT = '/detect_language'
-}
+DetectLanguagePlugin = Plugin {}
 
 function DetectLanguagePlugin:init()
   assert(self.app, 'DetectLanguagePlugin: plugin host app is required')

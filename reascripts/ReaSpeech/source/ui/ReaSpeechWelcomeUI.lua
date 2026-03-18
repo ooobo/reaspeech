@@ -21,8 +21,6 @@ ReaSpeechWelcomeUI = Polo {
 
   HOME_URL = "https://techaud.io/reaspeech/",
   GITHUB_URL = "https://github.com/TeamAudio/reaspeech",
-  DOCKER_HUB_URL = "https://hub.docker.com/r/techaudiodoc/reaspeech",
-  DOCKER_DOC_URL = "https://github.com/TeamAudio/reaspeech/blob/main/docs/docker.md",
 }
 
 function ReaSpeechWelcomeUI:init()
@@ -64,11 +62,6 @@ end
 function ReaSpeechWelcomeUI:render_demo_text()
   self:render_heading("Demo Version")
   self:render_text("Please note that this version is a demo and may not be available at all times.")
-  self:render_text("For a more reliable experience, you can run ReaSpeech locally using the ")
-  ImGui.SameLine(Ctx(), 0, 0)
-  Widgets.link("Docker image", ReaUtil.url_opener(self.DOCKER_DOC_URL), self.LINK_COLOR, self.LINK_COLOR)
-  ImGui.SameLine(Ctx(), 0, 0)
-  ImGui.Text(Ctx(), ".")
 end
 
 function ReaSpeechWelcomeUI:render_close_button()
@@ -115,6 +108,4 @@ function ReaSpeechWelcomeUI:render_footer()
   Widgets.link("ReaSpeech Website", ReaUtil.url_opener(self.HOME_URL))
   ImGui.SameLine(Ctx())
   Widgets.link("GitHub", ReaUtil.url_opener(self.GITHUB_URL))
-  ImGui.SameLine(Ctx())
-  Widgets.link("Docker Hub", ReaUtil.url_opener(self.DOCKER_HUB_URL))
 end
