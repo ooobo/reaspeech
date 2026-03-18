@@ -29,3 +29,16 @@ jobs:
     - name: test
       run: |
         make lint test-noversion SHELL=/bin/bash
+
+    - name: build
+      if: matrix.luaVersion == '5.4'
+      run: |
+        mkdir -p build
+        make build/ReaSpeechBundle.lua SHELL=/bin/bash
+
+    - name: upload ReaSpeech.lua
+      if: matrix.luaVersion == '5.4'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ReaSpeech.lua
+        path: reascripts/ReaSpeech/build/ReaSpeechBundle.lua
