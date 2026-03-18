@@ -19,7 +19,7 @@ function ReaSpeechAPI:init(executable_path)
     self:log("Using executable: " .. self.executable_path)
   else
     self:log("ERROR: parakeet-transcribe executable not found!")
-    self:log("Searched in script directory and python/dist/ subdirectory")
+    self:log("Expected location: same directory as the script")
   end
 end
 
@@ -62,16 +62,8 @@ function ReaSpeechAPI:find_executable(custom_path)
     return executable_path
   end
 
-  -- Fall back to development location (python/dist/)
-  local dev_executable_path = script_dir .. "python/dist/" .. executable_name
-  self:log("Looking for executable: " .. dev_executable_path)
-  if reaper.file_exists(dev_executable_path) then
-    self:ensure_executable(dev_executable_path)
-    return dev_executable_path
-  end
-
   -- Not found
-  self:log("Executable not found in either location")
+  self:log("Executable not found")
   return nil
 end
 
