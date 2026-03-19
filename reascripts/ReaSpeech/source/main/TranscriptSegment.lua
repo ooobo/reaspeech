@@ -273,9 +273,16 @@ function TranscriptSegment:is_on_timeline()
   local source_length = item_length * playrate
   local clip_end = startoffs + source_length
 
-  -- Check if segment is within the clipped portion of the file
-  -- Segment must start after or at clip start and end before or at clip end
-  return self.start >= startoffs and self.end_ <= clip_end
+  -- Check if segment overlaps the clipped portion of the file
+  return self.end_ > startoffs and self.start < clip_end
+end
+
+function TranscriptSegment:_clip_bounds()
+  local startoffs = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
+  local item_length = reaper.GetMediaItemInfo_Value(self.item, 'D_LENGTH')
+  local playrate = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_PLAYRATE')
+  local source_length = item_length * playrate
+  return startoffs, startoffs + source_length
 end
 
 function TranscriptSegment:timeline_start_time()
@@ -283,8 +290,11 @@ function TranscriptSegment:timeline_start_time()
     return nil
   end
 
+  local clip_start = self:_clip_bounds()
+  local clamped_start = math.max(self.start, clip_start)
+
   return reaper.GetMediaItemInfo_Value(self.item, 'D_POSITION')
-    + self.start
+    + clamped_start
     - reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
 end
 
@@ -293,8 +303,11 @@ function TranscriptSegment:timeline_end_time()
     return nil
   end
 
+  local _, clip_end = self:_clip_bounds()
+  local clamped_end = math.min(self.end_, clip_end)
+
   return reaper.GetMediaItemInfo_Value(self.item, 'D_POSITION')
-    + self.end_
+    + clamped_end
     - reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
 end
 

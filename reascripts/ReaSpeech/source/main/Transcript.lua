@@ -128,8 +128,8 @@ function Transcript:regenerate()
           local source_length = item_length * playrate
           local clip_end = startoffs + source_length
 
-          -- Check if segment is within the clipped portion
-          if segment.start >= startoffs and segment['end'] <= clip_end then
+          -- Check if segment overlaps the clipped portion
+          if segment['end'] > startoffs and segment.start < clip_end then
             -- Create segment for this item/take
             local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
 
