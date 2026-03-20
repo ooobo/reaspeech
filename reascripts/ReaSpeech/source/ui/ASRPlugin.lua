@@ -69,7 +69,12 @@ function ASRPlugin:handle_response(job_count)
 
   return function(response)
     if not response[1] or not response[1].segments then
+      self:log("WARNING: Transcription returned no segments")
       return
+    end
+
+    if #response[1].segments == 0 then
+      self:log("WARNING: Transcription returned empty segments list")
     end
 
     local segments = response[1].segments

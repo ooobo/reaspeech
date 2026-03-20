@@ -907,6 +907,43 @@ function TestTranscript:TestFromJson()
   lu.assertEquals(t.init_data[2].take, "take_userdata2")
 end
 
+function TestTranscript:testToTablePreservesAllSegmentsDuringSearch()
+  -- Regression test: to_table() must serialize ALL segments (init_data),
+  -- not just the filtered view (self.data), to prevent data loss when
+  -- saving while a search filter is active.
+  local fake_vals = {
+    media_item_userdata1 = "media_item_guid1",
+    media_item_userdata2 = "media_item_guid2",
+    take_userdata1 = "take_guid1",
+    take_userdata2 = "take_guid2",
+  }
+
+  local fake_getset = function(item_userdata, param)
+    if param == 'GUID' then
+      return true, fake_vals[item_userdata]
+    end
+  end
+  reaper.GetSetMediaItemInfo_String = fake_getset
+  reaper.GetSetMediaItemTakeInfo_String = fake_getset
+
+  local t = self:make_transcript()
+  t:set_name("test")
+
+  -- Apply search filter that matches only one segment
+  t.search = 'test 1'
+  t:update()
+
+  -- Verify filter is active
+  lu.assertEquals(#t.init_data, 2)
+  lu.assertEquals(#t.data, 1)
+
+  -- to_table() should still include ALL segments
+  local result = t:to_table()
+  lu.assertEquals(#result.segments, 2)
+  lu.assertEquals(result.segments[1].text, "test 1")
+  lu.assertEquals(result.segments[2].text, "test 2")
+end
+
 --
 
 os.exit(lu.LuaUnit.run())

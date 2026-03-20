@@ -236,13 +236,13 @@ function TranscriptSegment:get_source_path()
 end
 
 function TranscriptSegment:navigate(word_index, autoplay)
-  -- Don't navigate if segment is not on timeline
+  -- Don't navigate if segment is not on timeline (also validates item/take pointers)
   if not self:is_on_timeline() then
     return
   end
 
   local start = self.start
-  if word_index then
+  if word_index and self.words and self.words[word_index] then
     start = self.words[word_index].start
   end
   local offset = start - reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
@@ -278,6 +278,12 @@ function TranscriptSegment:is_on_timeline()
 end
 
 function TranscriptSegment:_clip_bounds()
+  if not reaper.ValidatePtr2(0, self.item, 'MediaItem*') then
+    return 0, 0
+  end
+  if not reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
+    return 0, 0
+  end
   local startoffs = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
   local item_length = reaper.GetMediaItemInfo_Value(self.item, 'D_LENGTH')
   local playrate = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_PLAYRATE')
@@ -358,6 +364,10 @@ function TranscriptSegment:to_table()
 end
 
 function TranscriptSegment:select_in_timeline(offset)
+  if not self:is_on_timeline() then
+    return
+  end
+
   offset = offset or 0
   local start = self.start + offset
   local end_ = self.end_ + offset

@@ -164,17 +164,23 @@ function ReaSpeechAPI:transcribe(audio_file, options)
         -- Read stdout file
         f = io.open(self.stdout_file, 'r')
         if f then
+          local line_num = 0
           for line in f:lines() do
+            line_num = line_num + 1
             if line and line:match('^{') then
               local success, segment = pcall(function()
                 return json.decode(line)
               end)
               if success and segment then
                 table.insert(self.segments, segment)
+              else
+                self.logger:log("WARNING: Skipped malformed JSON on line " .. line_num
+                  .. ": " .. line:sub(1, 100))
               end
             end
           end
           f:close()
+          self.logger:log("Parsed " .. #self.segments .. " segments from output")
         end
 
         -- Check for errors in stderr

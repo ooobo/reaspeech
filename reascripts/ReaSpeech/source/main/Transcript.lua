@@ -359,8 +359,10 @@ function Transcript:_get_item_position(segment)
 end
 
 function Transcript:to_table()
+  -- Use init_data (source of truth) not self.data (filtered/sorted view)
+  -- to avoid losing segments that are hidden by an active search filter
   local segments = {}
-  for _, segment in pairs(self.data) do
+  for _, segment in pairs(self.init_data) do
     table.insert(segments, segment:to_table())
   end
 
