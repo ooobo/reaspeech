@@ -113,7 +113,7 @@ function TestTranscript:testColumnOrder()
     avg_logprob = 0.5
   })
   local columns = t:get_columns()
-  lu.assertEquals(columns, {"id", "start", "end", "text", "score", "file", "avg_logprob"})
+  lu.assertEquals(columns, {"id", "start", "end", "raw-start", "raw-end", "text", "score", "file", "avg_logprob"})
 end
 
 function TestTranscript:testFileColumn()
@@ -461,6 +461,127 @@ function TestTranscript:testSortStabilityWithEqualValues()
   lu.assertEquals(segments[3]:get('id'), 3)
 end
 
+function TestTranscript:testSegmentOverlappingClipStart()
+  -- Segment starts before clip but ends within it
+  -- Clip covers source time 2.0-8.0 (startoffs=2, length=6)
+  -- Segment is 1.5-4.0 (overlaps: starts before clip start)
+  local item = 'item_overlap_start'
+  local take = 'take_overlap_start'
+
+  reaper.__set_item_info(item, 'D_POSITION', 10)  -- timeline position
+  reaper.__set_item_info(item, 'D_LENGTH', 6)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 2)
+  reaper.__set_take_info(take, 'D_PLAYRATE', 1)
+
+  local s = self.segment {
+    id = 1,
+    start = 1.5,
+    end_ = 4.0,
+    text = "overlaps start",
+    item = item,
+    take = take,
+  }
+
+  -- Should be on timeline (overlaps the clip)
+  lu.assertTrue(s:is_on_timeline())
+
+  -- Timeline start should be clamped to clip start
+  -- Clamped start = max(1.5, 2.0) = 2.0
+  -- Timeline start = 10 + 2.0 - 2.0 = 10.0
+  lu.assertAlmostEquals(s:timeline_start_time(), 10.0, 0.001)
+
+  -- Timeline end is not clamped (4.0 < 8.0)
+  -- Timeline end = 10 + 4.0 - 2.0 = 12.0
+  lu.assertAlmostEquals(s:timeline_end_time(), 12.0, 0.001)
+end
+
+function TestTranscript:testSegmentOverlappingClipEnd()
+  -- Segment starts within clip but ends after it
+  -- Clip covers source time 2.0-8.0
+  -- Segment is 6.0-9.0 (overlaps: ends after clip end)
+  local item = 'item_overlap_end'
+  local take = 'take_overlap_end'
+
+  reaper.__set_item_info(item, 'D_POSITION', 10)
+  reaper.__set_item_info(item, 'D_LENGTH', 6)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 2)
+  reaper.__set_take_info(take, 'D_PLAYRATE', 1)
+
+  local s = self.segment {
+    id = 1,
+    start = 6.0,
+    end_ = 9.0,
+    text = "overlaps end",
+    item = item,
+    take = take,
+  }
+
+  lu.assertTrue(s:is_on_timeline())
+
+  -- Timeline start = 10 + 6.0 - 2.0 = 14.0 (not clamped, within clip)
+  lu.assertAlmostEquals(s:timeline_start_time(), 14.0, 0.001)
+
+  -- Timeline end should be clamped to clip end
+  -- Clamped end = min(9.0, 8.0) = 8.0
+  -- Timeline end = 10 + 8.0 - 2.0 = 16.0 (= item position + item length)
+  lu.assertAlmostEquals(s:timeline_end_time(), 16.0, 0.001)
+end
+
+function TestTranscript:testSegmentFullyOutsideClip()
+  -- Segment is completely outside the clip
+  -- Clip covers source time 2.0-8.0
+  -- Segment is 9.0-11.0 (no overlap)
+  local item = 'item_outside'
+  local take = 'take_outside'
+
+  reaper.__set_item_info(item, 'D_POSITION', 10)
+  reaper.__set_item_info(item, 'D_LENGTH', 6)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 2)
+  reaper.__set_take_info(take, 'D_PLAYRATE', 1)
+
+  local s = self.segment {
+    id = 1,
+    start = 9.0,
+    end_ = 11.0,
+    text = "outside",
+    item = item,
+    take = take,
+  }
+
+  lu.assertFalse(s:is_on_timeline())
+  lu.assertNil(s:timeline_start_time())
+  lu.assertNil(s:timeline_end_time())
+end
+
+function TestTranscript:testSegmentFullyWithinClip()
+  -- Segment is fully within the clip (no clamping needed)
+  -- Clip covers source time 2.0-8.0
+  -- Segment is 3.0-5.0
+  local item = 'item_within'
+  local take = 'take_within'
+
+  reaper.__set_item_info(item, 'D_POSITION', 10)
+  reaper.__set_item_info(item, 'D_LENGTH', 6)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 2)
+  reaper.__set_take_info(take, 'D_PLAYRATE', 1)
+
+  local s = self.segment {
+    id = 1,
+    start = 3.0,
+    end_ = 5.0,
+    text = "within",
+    item = item,
+    take = take,
+  }
+
+  lu.assertTrue(s:is_on_timeline())
+
+  -- No clamping: timeline start = 10 + 3.0 - 2.0 = 11.0
+  lu.assertAlmostEquals(s:timeline_start_time(), 11.0, 0.001)
+  -- No clamping: timeline end = 10 + 5.0 - 2.0 = 13.0
+  lu.assertAlmostEquals(s:timeline_end_time(), 13.0, 0.001)
+end
+
 function TestTranscript:testSegmentScore()
   local s = self.segment {
     id = 1,
@@ -784,6 +905,43 @@ function TestTranscript:TestFromJson()
   lu.assertEquals(t.init_data[2].words[2].probability, 0.5)
   lu.assertEquals(t.init_data[2].item, "media_item_userdata2")
   lu.assertEquals(t.init_data[2].take, "take_userdata2")
+end
+
+function TestTranscript:testToTablePreservesAllSegmentsDuringSearch()
+  -- Regression test: to_table() must serialize ALL segments (init_data),
+  -- not just the filtered view (self.data), to prevent data loss when
+  -- saving while a search filter is active.
+  local fake_vals = {
+    media_item_userdata1 = "media_item_guid1",
+    media_item_userdata2 = "media_item_guid2",
+    take_userdata1 = "take_guid1",
+    take_userdata2 = "take_guid2",
+  }
+
+  local fake_getset = function(item_userdata, param)
+    if param == 'GUID' then
+      return true, fake_vals[item_userdata]
+    end
+  end
+  reaper.GetSetMediaItemInfo_String = fake_getset
+  reaper.GetSetMediaItemTakeInfo_String = fake_getset
+
+  local t = self:make_transcript()
+  t:set_name("test")
+
+  -- Apply search filter that matches only one segment
+  t.search = 'test 1'
+  t:update()
+
+  -- Verify filter is active
+  lu.assertEquals(#t.init_data, 2)
+  lu.assertEquals(#t.data, 1)
+
+  -- to_table() should still include ALL segments
+  local result = t:to_table()
+  lu.assertEquals(#result.segments, 2)
+  lu.assertEquals(result.segments[1].text, "test 1")
+  lu.assertEquals(result.segments[2].text, "test 2")
 end
 
 --

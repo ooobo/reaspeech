@@ -26,12 +26,19 @@ function TranscriptSegment:init()
   assert(self.item, 'missing item')
   assert(self.take, 'missing take')
   self.data = self._copy(self.data)
-  self.data['file'] = self:get_file()
-  -- Store full source path for later insertion if item is deleted
-  self.data['_source_path'] = self:get_source_path()
+  -- Only update file/source_path if take is valid; preserve existing values
+  -- when clips have been deleted from the timeline
+  local file = self:get_file()
+  if file ~= '' then
+    self.data['file'] = file
+  end
+  local source_path = self:get_source_path()
+  if source_path ~= '' then
+    self.data['_source_path'] = source_path
+  end
 end
 
-TranscriptSegment.from_whisper = function(segment, item, take)
+TranscriptSegment.from_response = function(segment, item, take)
   local result = {}
   local words = segment.words
 
@@ -236,13 +243,13 @@ function TranscriptSegment:get_source_path()
 end
 
 function TranscriptSegment:navigate(word_index, autoplay)
-  -- Don't navigate if segment is not on timeline
+  -- Don't navigate if segment is not on timeline (also validates item/take pointers)
   if not self:is_on_timeline() then
     return
   end
 
   local start = self.start
-  if word_index then
+  if word_index and self.words and self.words[word_index] then
     start = self.words[word_index].start
   end
   local offset = start - reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
@@ -273,9 +280,22 @@ function TranscriptSegment:is_on_timeline()
   local source_length = item_length * playrate
   local clip_end = startoffs + source_length
 
-  -- Check if segment is within the clipped portion of the file
-  -- Segment must start after or at clip start and end before or at clip end
-  return self.start >= startoffs and self.end_ <= clip_end
+  -- Check if segment overlaps the clipped portion of the file
+  return self.end_ > startoffs and self.start < clip_end
+end
+
+function TranscriptSegment:_clip_bounds()
+  if not reaper.ValidatePtr2(0, self.item, 'MediaItem*') then
+    return 0, 0
+  end
+  if not reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
+    return 0, 0
+  end
+  local startoffs = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
+  local item_length = reaper.GetMediaItemInfo_Value(self.item, 'D_LENGTH')
+  local playrate = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_PLAYRATE')
+  local source_length = item_length * playrate
+  return startoffs, startoffs + source_length
 end
 
 function TranscriptSegment:timeline_start_time()
@@ -283,8 +303,11 @@ function TranscriptSegment:timeline_start_time()
     return nil
   end
 
+  local clip_start = self:_clip_bounds()
+  local clamped_start = math.max(self.start, clip_start)
+
   return reaper.GetMediaItemInfo_Value(self.item, 'D_POSITION')
-    + self.start
+    + clamped_start
     - reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
 end
 
@@ -293,8 +316,11 @@ function TranscriptSegment:timeline_end_time()
     return nil
   end
 
+  local _, clip_end = self:_clip_bounds()
+  local clamped_end = math.min(self.end_, clip_end)
+
   return reaper.GetMediaItemInfo_Value(self.item, 'D_POSITION')
-    + self.end_
+    + clamped_end
     - reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
 end
 
@@ -345,6 +371,10 @@ function TranscriptSegment:to_table()
 end
 
 function TranscriptSegment:select_in_timeline(offset)
+  if not self:is_on_timeline() then
+    return
+  end
+
   offset = offset or 0
   local start = self.start + offset
   local end_ = self.end_ + offset

@@ -72,8 +72,10 @@ function TranscriptStorage:load_all_transcripts()
       }
 
       for _, segment_data in pairs(transcript_data.segments) do
-        local segment = TranscriptSegment.from_table(segment_data)
-        transcript:add_segment(segment)
+        local ok, segment = pcall(TranscriptSegment.from_table, segment_data)
+        if ok and segment then
+          transcript:add_segment(segment)
+        end
       end
 
       transcript:update()

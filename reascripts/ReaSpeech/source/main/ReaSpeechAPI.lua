@@ -61,6 +61,17 @@ function ReaSpeechAPI:find_executable(custom_path)
     return executable_path
   end
 
+  -- Check in REAPER Resources/Scripts/ReaSpeech/Speech Recognition/
+  local sep = EnvUtil.is_windows() and "\\" or "/"
+  local resources_path = reaper.GetResourcePath() .. sep
+    .. "Scripts" .. sep .. "ReaSpeech" .. sep .. "Speech Recognition" .. sep
+    .. executable_name
+  if reaper.file_exists(resources_path) then
+    self:log("Found executable in REAPER Resources: " .. resources_path)
+    self:ensure_executable(resources_path)
+    return resources_path
+  end
+
   -- Not found
   self:log("Executable not found")
   return nil
@@ -115,6 +126,8 @@ function ReaSpeechAPI:transcribe(audio_file, options)
   -- Add shell redirection (via_tempfile handles shell execution)
   local cmd_with_redirect = command .. ' > "' .. stdout_file .. '" 2> "' .. stderr_file .. '"'
 
+  self:log("Executing: " .. command)
+
   -- Record start time
   local start_time = reaper.time_precise()
 
@@ -164,17 +177,23 @@ function ReaSpeechAPI:transcribe(audio_file, options)
         -- Read stdout file
         f = io.open(self.stdout_file, 'r')
         if f then
+          local line_num = 0
           for line in f:lines() do
+            line_num = line_num + 1
             if line and line:match('^{') then
               local success, segment = pcall(function()
                 return json.decode(line)
               end)
               if success and segment then
                 table.insert(self.segments, segment)
+              else
+                self.logger:log("WARNING: Skipped malformed JSON on line " .. line_num
+                  .. ": " .. line:sub(1, 100))
               end
             end
           end
           f:close()
+          self.logger:log("Parsed " .. #self.segments .. " segments from output")
         end
 
         -- Check for errors in stderr

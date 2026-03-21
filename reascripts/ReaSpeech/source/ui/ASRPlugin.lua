@@ -69,7 +69,12 @@ function ASRPlugin:handle_response(job_count)
 
   return function(response)
     if not response[1] or not response[1].segments then
+      self:log("WARNING: Transcription returned no segments")
       return
+    end
+
+    if #response[1].segments == 0 then
+      self:log("WARNING: Transcription returned empty segments list")
     end
 
     local segments = response[1].segments
@@ -99,12 +104,12 @@ function ASRPlugin:handle_response(job_count)
         local source_length = item_length * playrate
         local clip_end = startoffs + source_length
 
-        -- Check if segment is within the clipped portion
-        if segment.start >= startoffs and segment['end'] <= clip_end then
+        -- Check if segment overlaps the clipped portion
+        if segment['end'] > startoffs and segment.start < clip_end then
           -- Create segment for this item/take
-          local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+          local from_response = TranscriptSegment.from_response(segment, item, take)
 
-          for _, s in pairs(from_whisper) do
+          for _, s in pairs(from_response) do
             if s:get('text') then
               transcript:add_segment(s)
               created_any = true
@@ -117,9 +122,9 @@ function ASRPlugin:handle_response(job_count)
       if not created_any and job.project_entries[1] then
         local item = job.project_entries[1].item
         local take = job.project_entries[1].take
-        local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+        local from_response = TranscriptSegment.from_response(segment, item, take)
 
-        for _, s in pairs(from_whisper) do
+        for _, s in pairs(from_response) do
           if s:get('text') then
             transcript:add_segment(s)
           end
@@ -133,11 +138,15 @@ function ASRPlugin:handle_response(job_count)
 
     -- Show transcript UI on first result, update incrementally after
     if not plugin then
-      plugin = TranscriptUI.new { transcript = transcript }
+      plugin = TranscriptUI.new { transcript = transcript, _loading = true }
       self.app.plugins:add_plugin(plugin)
     end
 
     job_count = job_count - 1
+
+    if job_count <= 0 then
+      plugin._loading = false
+    end
 
     -- Save to project after each file, so progress is persisted
     plugin:save_to_project()

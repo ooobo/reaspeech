@@ -5,10 +5,11 @@
 ]]--
 
 Transcript = Polo {
-  COLUMN_ORDER = {"id", "start", "end", "text", "score", "file", "avg_logprob"},
+  COLUMN_ORDER = {"id", "start", "end", "raw-start", "raw-end", "text", "score", "file", "avg_logprob"},
   DEFAULT_HIDE = {
     seek = true, temperature = true, tokens = true, avg_logprob = true,
-    compression_ratio = true, no_speech_prob = true
+    compression_ratio = true, no_speech_prob = true,
+    ['raw-start'] = true, ['raw-end'] = true
   },
 
   init = function(self)
@@ -39,7 +40,7 @@ end
 function Transcript:get_columns()
   if #self.init_data > 0 then
     -- Include virtual columns that are computed in TranscriptSegment:get()
-    local columns = {"score", "file"}
+    local columns = {"score", "file", "raw-start", "raw-end"}
     local row = self.init_data[1]
     for k, _ in pairs(row.data) do
       if k:sub(1, 1) ~= '_' then
@@ -108,6 +109,9 @@ function Transcript:regenerate()
     local path = transcription.path
     local segments = transcription.segments
 
+    -- Derive filename from path for fallback when take is invalid
+    local fallback_file = path:gsub(".*[\\/](.*)", "%1"):gsub("(.*)[.].*", "%1")
+
     -- Find all items/takes on timeline that use this file
     local matching_items = self:find_items_by_path(path)
 
@@ -128,12 +132,12 @@ function Transcript:regenerate()
           local source_length = item_length * playrate
           local clip_end = startoffs + source_length
 
-          -- Check if segment is within the clipped portion
-          if segment.start >= startoffs and segment['end'] <= clip_end then
+          -- Check if segment overlaps the clipped portion
+          if segment['end'] > startoffs and segment.start < clip_end then
             -- Create segment for this item/take
-            local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+            local from_response = TranscriptSegment.from_response(segment, item, take)
 
-            for _, s in pairs(from_whisper) do
+            for _, s in pairs(from_response) do
               if s:get('text') then
                 self:add_segment(s)
                 created_any = true
@@ -150,10 +154,17 @@ function Transcript:regenerate()
         local take = matching_items[1] and matching_items[1].take or transcription.fallback_take
 
         if item and take then
-          local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+          local from_response = TranscriptSegment.from_response(segment, item, take)
 
-          for _, s in pairs(from_whisper) do
+          for _, s in pairs(from_response) do
             if s:get('text') then
+              -- Ensure file/source_path are set even when take is stale
+              if not s.data['file'] or s.data['file'] == '' then
+                s.data['file'] = fallback_file
+              end
+              if not s.data['_source_path'] or s.data['_source_path'] == '' then
+                s.data['_source_path'] = path
+              end
               self:add_segment(s)
             end
           end
@@ -359,8 +370,10 @@ function Transcript:_get_item_position(segment)
 end
 
 function Transcript:to_table()
+  -- Use init_data (source of truth) not self.data (filtered/sorted view)
+  -- to avoid losing segments that are hidden by an active search filter
   local segments = {}
-  for _, segment in pairs(self.data) do
+  for _, segment in pairs(self.init_data) do
     table.insert(segments, segment:to_table())
   end
 

@@ -4,7 +4,9 @@
 
 ]]--
 
-ReaSpeechWorker = Polo {}
+ReaSpeechWorker = Polo {
+  PROCESS_TIMEOUT = 600,  -- 10 minutes in seconds
+}
 
 function ReaSpeechWorker:init()
   assert(self.requests, 'missing requests')
@@ -17,6 +19,13 @@ function ReaSpeechWorker:init()
   self.job_count = 0
   self.processing_start_time = nil
   self.last_processing_time = nil
+
+  -- Processing stats for UI display
+  self.completed_job_index = 0
+  self.total_audio_duration = 0
+  self.completed_audio_duration = 0
+  self.completed_wall_time = 0
+  self.transcription_complete = false
 end
 
 function ReaSpeechWorker:react()
@@ -68,6 +77,7 @@ function ReaSpeechWorker:react_handle_jobs()
       self.processing_start_time = nil
     end
     self:log('Processing finished')
+    self.transcription_complete = true
     self.job_count = 0
   end
 end
@@ -110,12 +120,55 @@ function ReaSpeechWorker:status()
   end
 end
 
+function ReaSpeechWorker.format_duration(seconds)
+  local h = math.floor(seconds / 3600)
+  local m = math.floor((seconds % 3600) / 60)
+  local s = math.floor(seconds % 60)
+  return string.format("%d:%02d:%02d", h, m, s)
+end
+
+function ReaSpeechWorker:processing_stats()
+  if self.job_count == 0 then return nil end
+
+  local current_file = self.completed_job_index + 1
+  if current_file > self.job_count then
+    current_file = self.job_count
+  end
+
+  local remaining_audio = self.total_audio_duration - self.completed_audio_duration
+  local estimated_remaining
+  if self.completed_audio_duration > 0 and self.completed_wall_time > 0 then
+    -- Use measured speed ratio from completed files
+    local speed_ratio = self.completed_audio_duration / self.completed_wall_time
+    estimated_remaining = remaining_audio / speed_ratio
+  else
+    -- Default estimate before any file completes: 12x realtime
+    estimated_remaining = remaining_audio / 12
+  end
+
+  return {
+    current_file = current_file,
+    total_files = self.job_count,
+    transcribed_duration = self.completed_audio_duration,
+    total_duration = self.total_audio_duration,
+    estimated_remaining = estimated_remaining,
+  }
+end
+
 function ReaSpeechWorker:cancel()
+  local cancelled_count = #self.pending_jobs
   if self.active_job then
+    cancelled_count = cancelled_count + 1
+    self:log("Cancelling active job: " .. (self.active_job.audio_file or "unknown"))
+    self:log("Note: background process will continue running until it finishes")
     self.active_job = nil
+  end
+  if #self.pending_jobs > 0 then
+    self:log("Cancelling " .. #self.pending_jobs .. " pending job(s)")
   end
   self.pending_jobs = {}
   self.job_count = 0
+  self:log("Cancelled " .. cancelled_count .. " job(s)")
 end
 
 function ReaSpeechWorker:handle_request(request)
@@ -124,14 +177,48 @@ function ReaSpeechWorker:handle_request(request)
   -- Start timer when beginning fresh processing
   if self.job_count == 0 then
     self.processing_start_time = reaper.time_precise()
+    self.completed_job_index = 0
+    self.completed_audio_duration = 0
+    self.completed_wall_time = 0
+    self.total_audio_duration = 0
+    self.transcription_complete = false
   end
 
   -- Accumulate job count to prevent progress from resetting when new requests come in
   self.job_count = self.job_count + #request.jobs
 
-  for _, job in ipairs(self:expand_jobs_from_request(request)) do
+  local expanded_jobs = self:expand_jobs_from_request(request)
+
+  self:log("Queuing " .. #expanded_jobs .. " file(s) for transcription:")
+  for i, job in ipairs(expanded_jobs) do
+    -- Calculate source duration for each job
+    job.audio_duration = self:get_job_audio_duration(job)
+    self.total_audio_duration = self.total_audio_duration + job.audio_duration
+    self:log("  [" .. i .. "] " .. job.audio_file
+      .. " (" .. string.format("%.1fs", job.audio_duration) .. ")")
     table.insert(self.pending_jobs, job)
   end
+end
+
+function ReaSpeechWorker:get_job_audio_duration(job)
+  local project_entries = job.job and job.job.project_entries
+  if project_entries and project_entries[1] then
+    local take = project_entries[1].take
+    if take then
+      local source = reaper.GetMediaItemTake_Source(take)
+      if source then
+        local length, is_qn = reaper.GetMediaSourceLength(source)
+        if not is_qn and length > 0 then
+          return length
+        end
+      end
+      local item = project_entries[1].item
+      if item then
+        return reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
+      end
+    end
+  end
+  return 0
 end
 
 function ReaSpeechWorker:expand_jobs_from_request(request)
@@ -154,11 +241,18 @@ end
 
 -- May return true if the job has completed and should no longer be active
 function ReaSpeechWorker:handle_job_completion(active_job)
-  self:debug('Job completed: ' .. dump(active_job))
+  self:log("Completed transcription: " .. active_job.audio_file)
 
   local result = active_job.process:result()
 
   if result then
+    self.completed_job_index = self.completed_job_index + 1
+    self.completed_audio_duration = self.completed_audio_duration
+      + (active_job.audio_duration or 0)
+    if active_job.process and active_job.process.start_time then
+      self.completed_wall_time = self.completed_wall_time
+        + (reaper.time_precise() - active_job.process.start_time)
+    end
     self:handle_response(active_job, result)
     self.active_job = nil
     return true
@@ -186,6 +280,8 @@ function ReaSpeechWorker:start_active_job()
 
   local active_job = self.active_job
 
+  self:log("Starting transcription: " .. active_job.audio_file)
+
   active_job.process = ReaSpeechAPI:transcribe(
     active_job.audio_file,
     active_job.options
@@ -205,5 +301,14 @@ function ReaSpeechWorker:check_active_job()
   elseif active_job.process:error() then
     self:handle_error(active_job, active_job.process:error())
     self.active_job = nil
+  else
+    -- Check for timeout
+    local elapsed = reaper.time_precise() - active_job.process.start_time
+    if elapsed > self.PROCESS_TIMEOUT then
+      self:log("ERROR: Process timed out after " .. math.floor(elapsed) .. "s")
+      self:handle_error(active_job, "Transcription timed out after "
+        .. math.floor(elapsed) .. " seconds")
+      self.active_job = nil
+    end
   end
 end

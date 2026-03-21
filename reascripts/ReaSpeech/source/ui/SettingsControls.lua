@@ -10,7 +10,10 @@ SettingsControls = PluginControls {
       ReaSpeechPlugins.tab(
         SettingsPlugin.PLUGIN_KEY,
         'Settings',
-        function() self.layout:render() end,
+        function()
+          self.layout:render()
+          self.model_layout:render()
+        end,
         {
           will_close = function()
             return true
@@ -35,8 +38,17 @@ function SettingsControls:init()
     max = Fonts.MAX_SIZE,
   }
 
+  self:init_model()
   self:init_logging()
   self:init_layout()
+end
+
+function SettingsControls:init_model()
+  -- Access the shared ASR model setting
+  local asr_plugin = app.plugins:get_plugin('asr')
+  if asr_plugin and asr_plugin._controls then
+    self.model_name = asr_plugin._controls.model_name
+  end
 end
 
 function SettingsControls:init_layout()
@@ -57,6 +69,20 @@ function SettingsControls:init_layout()
       end
     end
   }
+
+  self.model_layout = ColumnLayout.new {
+    column_padding = ReaSpeechControlsUI.COLUMN_PADDING,
+    margin_bottom = ReaSpeechControlsUI.MARGIN_BOTTOM,
+    margin_left = ReaSpeechControlsUI.MARGIN_LEFT,
+    margin_right = ReaSpeechControlsUI.MARGIN_RIGHT,
+    num_columns = 1,
+
+    render_column = function (column)
+      ImGui.PushItemWidth(Ctx(), column.width)
+      Trap(function () self:render_model() end)
+      ImGui.PopItemWidth(Ctx())
+    end
+  }
 end
 
 function SettingsControls:init_logging()
@@ -75,6 +101,12 @@ end
 
 function SettingsControls:render_font_size()
   self.font_size:render()
+end
+
+function SettingsControls:render_model()
+  if self.model_name then
+    self.model_name:render()
+  end
 end
 
 function SettingsControls:render_logging()

@@ -62,11 +62,8 @@ function ReaSpeechControlsUI:render()
   ImGui.BeginGroup(Ctx())
   Trap(function()
     Widgets.png('reaspeech-logo-small')
-
-    -- Nice big column under the logo to render into, ie
-    -- if ImGui.Button(Ctx(), 'Metrics') then
-    --   ReaSpeechUI.METRICS = not ReaSpeechUI.METRICS
-    -- end
+    self:render_processing_stats()
+    self:render_action_buttons()
   end)
   ImGui.EndGroup(Ctx())
 
@@ -179,6 +176,97 @@ function ReaSpeechControlsUI:_reset_drag_drop()
   self._drop_zones = nil
   self._dropped_files = nil
   self._dragdrop_flags = nil
+end
+
+function ReaSpeechControlsUI:render_processing_stats()
+  local worker = self.plugins.app and self.plugins.app.worker
+  if not worker then return end
+
+  local stats = worker:processing_stats()
+  local logo_width = 101  -- reaspeech-logo-small width
+
+  if not stats and worker.transcription_complete then
+    ImGui.PushTextWrapPos(Ctx(), ImGui.GetCursorPosX(Ctx()) + logo_width)
+    Trap(function()
+      Fonts.wrap(Ctx(), Fonts.small_bold, function()
+        ImGui.Text(Ctx(), "Transcription")
+        ImGui.Text(Ctx(), "complete")
+      end, Trap)
+    end)
+    ImGui.PopTextWrapPos(Ctx())
+    return
+  end
+
+  if not stats then return end
+
+  ImGui.PushTextWrapPos(Ctx(), ImGui.GetCursorPosX(Ctx()) + logo_width)
+  Trap(function()
+    Fonts.wrap(Ctx(), Fonts.small_bold, function()
+      ImGui.Text(Ctx(), "Processing file:")
+    end, Trap)
+    Fonts.wrap(Ctx(), Fonts.small, function()
+      ImGui.Text(Ctx(), string.format(
+        "%d of %d", stats.current_file, stats.total_files))
+    end, Trap)
+    Fonts.wrap(Ctx(), Fonts.small_bold, function()
+      ImGui.Text(Ctx(), "Transcribed:")
+    end, Trap)
+    Fonts.wrap(Ctx(), Fonts.small, function()
+      ImGui.Text(Ctx(), ReaSpeechWorker.format_duration(stats.transcribed_duration))
+    end, Trap)
+    Fonts.wrap(Ctx(), Fonts.small_bold, function()
+      ImGui.Text(Ctx(), "Total:")
+    end, Trap)
+    Fonts.wrap(Ctx(), Fonts.small, function()
+      ImGui.Text(Ctx(), ReaSpeechWorker.format_duration(stats.total_duration))
+    end, Trap)
+    Fonts.wrap(Ctx(), Fonts.small_bold, function()
+      ImGui.Text(Ctx(), "Time to complete:")
+    end, Trap)
+    Fonts.wrap(Ctx(), Fonts.small, function()
+      ImGui.Text(Ctx(), "~" .. ReaSpeechWorker.format_duration(stats.estimated_remaining))
+    end, Trap)
+  end)
+  ImGui.PopTextWrapPos(Ctx())
+end
+
+function ReaSpeechControlsUI:render_action_buttons()
+  local asr_plugin = self.plugins:get_plugin('asr')
+  if not asr_plugin then return end
+
+  local worker = self.plugins.app and self.plugins.app.worker
+  local executable_missing = not ReaSpeechAPI.executable_path
+
+  local progress
+  if worker then
+    Trap(function() progress = worker:progress() end)
+  end
+
+  Widgets.disable_if(progress or executable_missing, function()
+    local plugin_actions = asr_plugin:actions()
+    for _, action in ipairs(plugin_actions) do
+      action:render()
+    end
+  end)
+
+  if executable_missing and not progress then
+    ImGui.PushStyleColor(Ctx(), ImGui.Col_Text(), 0xff6666ff)
+    Trap(function()
+      ImGui.PushTextWrapPos(Ctx(), ImGui.GetCursorPosX(Ctx()) + 101)
+      Trap(function()
+        ImGui.TextWrapped(Ctx(),
+          "Parakeet executable not found.")
+      end)
+      ImGui.PopTextWrapPos(Ctx())
+    end)
+    ImGui.PopStyleColor(Ctx())
+  end
+
+  if progress and worker then
+    if ImGui.Button(Ctx(), "Cancel") then
+      worker:cancel()
+    end
+  end
 end
 
 function ReaSpeechControlsUI:render_heading()

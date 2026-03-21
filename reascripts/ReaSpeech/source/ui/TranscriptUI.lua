@@ -10,7 +10,7 @@ TranscriptUI = Polo {
 
   FLOAT_FORMAT = '%.4f',
 
-  COLUMN_WIDTH = 55,
+  COLUMN_WIDTH = 70,
   LARGE_COLUMN_WIDTH = 300,
 
   ACTIONS_MARGIN = 8,
@@ -362,8 +362,16 @@ function TranscriptUI:render_name()
       self.name_editor:render()
     else
       ImGui.Dummy(Ctx(), 1, 2)
-      ImGui.Dummy(Ctx(), 2, 0)
-      ImGui.SameLine(Ctx())
+      local icon_size = Fonts.size:get() - 1
+      if self._loading then
+        ImGui.Dummy(Ctx(), 2, 0)
+        ImGui.SameLine(Ctx())
+        self:render_spinner(icon_size)
+        ImGui.SameLine(Ctx())
+      else
+        ImGui.Dummy(Ctx(), 2, 0)
+        ImGui.SameLine(Ctx())
+      end
 
       if #self.transcript.name < 1 then
         ImGui.Text(Ctx(), "(Untitled)")
@@ -371,7 +379,6 @@ function TranscriptUI:render_name()
         ImGui.Text(Ctx(), self.transcript.name)
       end
       ImGui.SameLine(Ctx())
-      local icon_size = Fonts.size:get() - 1
       if Widgets.icon(Icons.pencil, "##edit_name", icon_size, icon_size, "Edit") then
         self._original_transcript_name = self.transcript.name
         self.editing_name = true
@@ -379,6 +386,13 @@ function TranscriptUI:render_name()
       ImGui.Dummy(Ctx(), 1, 2)
     end
   end, Trap)
+end
+
+function TranscriptUI:render_spinner(size)
+  local x, y = ImGui.GetCursorScreenPos(Ctx())
+  ImGui.Dummy(Ctx(), size, size)
+  local dl = ImGui.GetWindowDrawList(Ctx())
+  Icons.spinner(dl, x, y, size, size, 0xffffffff)
 end
 
 function TranscriptUI:render_result_actions()
@@ -661,7 +675,9 @@ function TranscriptUI:render_text(segment, column)
 end
 
 function TranscriptUI:render_text_simple(segment, column)
-  Widgets.link(segment:get(column, ""), function () segment:navigate(nil,self.autoplay) end)
+  local text = segment:get(column, "")
+  Widgets.link(text, function () segment:navigate(nil, self.autoplay) end)
+  Widgets.tooltip(text)
 end
 
 function TranscriptUI:render_text_words(segment, _)

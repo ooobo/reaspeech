@@ -32,14 +32,15 @@ function ASRActions:selected_tracks_button()
 
   if selected_track_count == 0 then
     self._selected_tracks_button = Widgets.Button.new({
-      label = "Process Selected Tracks",
+      label = "Process\nSelected\nTracks",
       disabled = true,
     })
     return self._selected_tracks_button
   end
 
-  local button_text = ("Process %sSelected Track%s")
-    :format(self.pluralizer(selected_track_count, 's'))
+  local count_prefix, plural = self.pluralizer(selected_track_count, 's')
+  local button_text = ("Process\n%sSelected\nTrack%s")
+    :format(count_prefix, plural)
 
   self._selected_tracks_button = Widgets.Button.new({
     label = button_text,
@@ -62,14 +63,15 @@ function ASRActions:selected_items_button()
 
   if selected_item_count == 0 then
     self._selected_items_button = Widgets.Button.new({
-      label = "Process Selected Items",
+      label = "Process\nSelected\nItems",
       disabled = true,
     })
     return self._selected_items_button
   end
 
-  local button_text = ("Process %sSelected Item%s")
-    :format(self.pluralizer(selected_item_count, 's'))
+  local count_prefix, plural = self.pluralizer(selected_item_count, 's')
+  local button_text = ("Process\n%sSelected\nItem%s")
+    :format(count_prefix, plural)
 
   self._selected_items_button = Widgets.Button.new({
     label = button_text,
@@ -90,7 +92,7 @@ function ASRActions:all_items_button()
   end
 
   self._all_items_button = Widgets.Button.new({
-    label = "Process All Items",
+    label = "Process\nAll Items",
     on_click = function ()
       self:process_jobs(self.jobs_for_all_items)
     end,
@@ -105,7 +107,7 @@ function ASRActions:import_button()
   end
 
   self._import_button = Widgets.Button.new({
-    label = "Import Transcript",
+    label = "Import\nTranscript",
     on_click = TranscriptImporter:quick_import()
   })
 
@@ -122,12 +124,57 @@ function ASRActions.pluralizer(count, suffix)
   end
 end
 
+function ASRActions.format_duration(seconds)
+  local h = math.floor(seconds / 3600)
+  local m = math.floor((seconds % 3600) / 60)
+  local s = math.floor(seconds % 60)
+  return string.format("%d:%02d:%02d", h, m, s)
+end
+
+function ASRActions.total_duration(jobs)
+  local seen_path = {}
+  local total = 0
+  for _, job in ipairs(jobs) do
+    if not seen_path[job.path] then
+      seen_path[job.path] = true
+      local source = reaper.GetMediaItemTake_Source(job.take)
+      if source then
+        local length, is_qn = reaper.GetMediaSourceLength(source)
+        if not is_qn and length > 0 then
+          total = total + length
+        else
+          total = total + reaper.GetMediaItemInfo_Value(job.item, 'D_LENGTH')
+        end
+      else
+        total = total + reaper.GetMediaItemInfo_Value(job.item, 'D_LENGTH')
+      end
+    end
+  end
+  return total
+end
+
 function ASRActions:process_jobs(job_generator)
   local jobs = job_generator()
 
   if #jobs == 0 then
     reaper.MB("No media found to process.", "No media", 0)
     return
+  end
+
+  -- Check total duration and confirm if over 30 minutes
+  local total_seconds = ASRActions.total_duration(jobs)
+  if total_seconds > 30 * 60 then
+    local estimated_seconds = total_seconds / 12
+    local msg = string.format(
+      "You are about to transcribe %s of audio, it can take up to %s to complete. " ..
+      "You'll see the transcript update as it works through each file.",
+      ASRActions.format_duration(total_seconds),
+      ASRActions.format_duration(estimated_seconds))
+    -- reaper.MB returns 1 for OK, 2 for Cancel (type 1 = OK/Cancel)
+    local result = reaper.MB(msg, "Confirm Transcription", 1)
+    if result ~= 1 then
+      return
+    end
   end
 
   self.plugin:asr(jobs)
