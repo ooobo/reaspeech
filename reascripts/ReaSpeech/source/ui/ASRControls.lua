@@ -78,6 +78,45 @@ end
 function ASRControls:render()
   self.actions_layout:render()
   self.alert_popup:render()
+
+  local margin = ReaSpeechControlsUI.MARGIN_LEFT
+  ImGui.SetCursorPosX(Ctx(), margin)
+  local avail_width = ImGui.GetContentRegionAvail(Ctx())
+
+  ImGui.PushTextWrapPos(Ctx(), ImGui.GetCursorPosX(Ctx()) + avail_width)
+  Trap(function()
+    ImGui.TextWrapped(Ctx(),
+      "Select clips or a track you want to transcribe, and click the button on the left.\n" ..
+      "Transcribing time depends on the speed of your computer, everything happens on device, " ..
+      "nothing is sent over the internet.")
+
+    ImGui.Spacing(Ctx())
+
+    Fonts.wrap(Ctx(), Fonts():bold, function()
+      ImGui.Text(Ctx(), "Using the transcript")
+    end, Trap)
+
+    ImGui.TextWrapped(Ctx(),
+      "A transcript table will open once the first file is transcribed, and progressively update.\n" ..
+      "Hover over the text column in a row to see the full text, and click to jump to that part " ..
+      "of the audio timeline.\n" ..
+      "This program transcribes the full raw file, not just what is on the timeline. You will see " ..
+      "in the table below which segments are on the timeline and which are not.")
+
+    ImGui.Spacing(Ctx())
+
+    ImGui.TextWrapped(Ctx(),
+      "Tip: use the search bar to find a phrase you want to insert, then click the filename in the " ..
+      "file column to insert it on the timeline. Very useful if you were looking for another take " ..
+      "of a line, or looking for some part of the interview you remembered but didn't have a timecode.")
+
+    ImGui.Spacing(Ctx())
+
+    ImGui.TextWrapped(Ctx(),
+      "While this transcription model is basically the state of the art, it's definitely not perfect " ..
+      "and it will have errors.")
+  end)
+  ImGui.PopTextWrapPos(Ctx())
 end
 
 function ASRControls:get_request_data()
