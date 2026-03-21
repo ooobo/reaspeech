@@ -10,7 +10,10 @@ SettingsControls = PluginControls {
       ReaSpeechPlugins.tab(
         SettingsPlugin.PLUGIN_KEY,
         'Settings',
-        function() self.layout:render() end,
+        function()
+          self.layout:render()
+          self.model_layout:render()
+        end,
         {
           will_close = function()
             return true
@@ -49,7 +52,7 @@ function SettingsControls:init_model()
 end
 
 function SettingsControls:init_layout()
-  local renderers = { self.render_font_size, self.render_model, self.render_logging }
+  local renderers = { self.render_font_size, self.render_logging }
 
   self.layout = ColumnLayout.new {
     column_padding = ReaSpeechControlsUI.COLUMN_PADDING,
@@ -64,6 +67,20 @@ function SettingsControls:init_layout()
         Trap(function () renderers[column.num](self, column) end)
         ImGui.PopItemWidth(Ctx())
       end
+    end
+  }
+
+  self.model_layout = ColumnLayout.new {
+    column_padding = ReaSpeechControlsUI.COLUMN_PADDING,
+    margin_bottom = ReaSpeechControlsUI.MARGIN_BOTTOM,
+    margin_left = ReaSpeechControlsUI.MARGIN_LEFT,
+    margin_right = ReaSpeechControlsUI.MARGIN_RIGHT,
+    num_columns = 1,
+
+    render_column = function (column)
+      ImGui.PushItemWidth(Ctx(), column.width)
+      Trap(function () self:render_model() end)
+      ImGui.PopItemWidth(Ctx())
     end
   }
 end
