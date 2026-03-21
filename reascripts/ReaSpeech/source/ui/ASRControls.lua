@@ -102,19 +102,11 @@ function ASRControls:render()
       "- Hover over the text column in a row to see the full text, and click to jump to that part " ..
       "of the audio timeline.\n\n" ..
       "- This program transcribes the full raw file, not just what is on the timeline. You will see " ..
-      "in the table below which segments are on the timeline and which are not.")
-
-    ImGui.Spacing(Ctx())
-
-    ImGui.TextWrapped(Ctx(),
-      "Tip: use the search bar to find a phrase you want to insert, then click the filename in the " ..
+      "in the table below which segments are on the timeline and which are not.\n\n" ..
+      "- Tip: use the search bar to find a phrase you want to insert, then click the filename in the " ..
       "file column to insert it on the timeline. Very useful if you were looking for another take " ..
-      "of a line, or looking for some part of the interview you remembered but didn't have a timecode.")
-
-    ImGui.Spacing(Ctx())
-
-    ImGui.TextWrapped(Ctx(),
-      "While this transcription model is basically the state of the art, it's definitely not perfect " ..
+      "of a line, or looking for some part of the interview you remembered but didn't have a timecode.\n\n" ..
+      "- While this transcription model is basically the state of the art, it's definitely not perfect " ..
       "and it will have errors.")
   end)
   ImGui.PopTextWrapPos(Ctx())
