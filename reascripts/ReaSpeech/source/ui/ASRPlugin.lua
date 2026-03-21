@@ -138,11 +138,15 @@ function ASRPlugin:handle_response(job_count)
 
     -- Show transcript UI on first result, update incrementally after
     if not plugin then
-      plugin = TranscriptUI.new { transcript = transcript }
+      plugin = TranscriptUI.new { transcript = transcript, _loading = true }
       self.app.plugins:add_plugin(plugin)
     end
 
     job_count = job_count - 1
+
+    if job_count <= 0 then
+      plugin._loading = false
+    end
 
     -- Save to project after each file, so progress is persisted
     plugin:save_to_project()

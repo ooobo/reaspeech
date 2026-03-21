@@ -16,6 +16,9 @@ TranscriptUI = Polo {
   ACTIONS_MARGIN = 8,
   ACTIONS_PADDING = 8,
 
+  SPINNER_FRAMES = { '|', '/', '-', '\\' },
+  SPINNER_INTERVAL = 0.2,  -- seconds per frame
+
   SCORE_COLORS = {
     bright_green = 0xa3ff00a6,
     dark_green = 0x2cba00a6,
@@ -194,11 +197,25 @@ function TranscriptUI:transcript_id()
 end
 
 function TranscriptUI:transcript_name()
+  local name
   if not self.transcript.name or #self.transcript.name < 1 then
-    return 'Untitled Transcript'
+    name = 'Untitled Transcript'
+  else
+    name = TranscriptUI.TAB_TITLE_FORMAT:format(self.transcript.name)
   end
 
-  return TranscriptUI.TAB_TITLE_FORMAT:format(self.transcript.name)
+  if self._loading then
+    name = name .. ' ' .. self:_spinner_char()
+  end
+
+  return name
+end
+
+function TranscriptUI:_spinner_char()
+  local frames = self.SPINNER_FRAMES
+  local time = reaper.time_precise()
+  local index = math.floor(time / self.SPINNER_INTERVAL) % #frames + 1
+  return frames[index]
 end
 
 function TranscriptUI:clipper()
@@ -661,7 +678,9 @@ function TranscriptUI:render_text(segment, column)
 end
 
 function TranscriptUI:render_text_simple(segment, column)
-  Widgets.link(segment:get(column, ""), function () segment:navigate(nil,self.autoplay) end)
+  local text = segment:get(column, "")
+  Widgets.link(text, function () segment:navigate(nil, self.autoplay) end)
+  Widgets.tooltip(text)
 end
 
 function TranscriptUI:render_text_words(segment, _)
