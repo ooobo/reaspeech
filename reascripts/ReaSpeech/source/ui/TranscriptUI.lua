@@ -635,13 +635,7 @@ function TranscriptUI:render_table_cell(segment, column)
     -- Time columns: get() returns timeline times for start/end, raw times for raw-start/raw-end
     local time_value = segment:get(column)
     if time_value then
-      local full_time = reaper.format_timestr(time_value, '')
-      -- Strip milliseconds for display, show full precision on hover
-      local short_time = full_time:gsub("%.[%d]+$", "")
-      ImGui.Text(Ctx(), short_time)
-      if ImGui.IsItemHovered(Ctx()) then
-        ImGui.SetTooltip(Ctx(), full_time)
-      end
+      ImGui.Text(Ctx(), reaper.format_timestr(time_value, ''))
     else
       ImGui.Text(Ctx(), '-')
     end
