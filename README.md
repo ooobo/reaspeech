@@ -22,18 +22,18 @@ To update, run **Actions > ReaPack: Synchronize packages**
 
 ### Windows
 
-1. Download the latest `reaspeech-windows-package.zip` from [Releases](https://github.com/ooobo/reaspeech/releases)
+1. Download `ReaSpeech.lua` and `parakeet-transcribe.exe` from [Releases](https://github.com/ooobo/reaspeech/releases)
 2. Extract to `%AppData%\Roaming\REAPER\Scripts\ReaSpeech`
-3. In REAPER: Actions > Show action list > New Action... > Load ReaScript
+3. In REAPER: **Actions > Show action list > New Action... > Load ReaScript**
 4. Load `ReaSpeech.lua` from that folder
 
 ### macOS
 
-1. Download the latest `reaspeech-macos-package.zip` from [Releases](https://github.com/ooobo/reaspeech/releases)
+1. Download `ReaSpeech.lua` and `parakeet-transcribe-macos` from [Releases](https://github.com/ooobo/reaspeech/releases)
 2. Extract to `~/Library/Application Support/REAPER/Scripts/ReaSpeech`
-3. In REAPER: Actions > Show action list > New Action... > Load ReaScript
+3. In REAPER: **Actions > Show action list > New Action... > Load ReaScript**
 4. Load `ReaSpeech.lua` from that folder
-5. On first run, you may need to allow the executables in System Settings > Privacy & Security
+5. On first run, you may need to allow the executables in **System Settings > Privacy & Security**.
 
 # Quick Usage
 
@@ -45,7 +45,7 @@ To update, run **Actions > ReaPack: Synchronize packages**
 
 # Note
 
-Docker and native python support has been replaced so will no longer work.
+Docker and native python support from the original has been replaced so will no longer work. 
 
 # Credits
 
