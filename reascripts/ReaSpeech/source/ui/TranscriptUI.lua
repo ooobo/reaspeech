@@ -97,6 +97,10 @@ function TranscriptUI:init()
 
   self._transcript_saved = self._transcript_saved or false
 
+  self._active_inner_tab = 'table'
+  self.editor_segments = {}
+  self._editor_initialized = false
+
   self:init_layouts()
 end
 
@@ -235,6 +239,14 @@ function TranscriptUI:init_layouts()
       self:render()
     end
   }
+
+  self.inner_tab_bar = Widgets.TabBar.new {
+    default = 'table',
+    tabs = {
+      { key = 'table', label = 'Table' },
+      { key = 'editor', label = 'Editor' },
+    },
+  }
 end
 
 function TranscriptUI:drop_zones(files)
@@ -348,7 +360,18 @@ end
 function TranscriptUI:render()
   self:render_name()
   self.actions_layout:render()
-  self:render_table()
+
+  self.inner_tab_bar:render()
+  self._active_inner_tab = self.inner_tab_bar:value()
+
+  if self._active_inner_tab == 'editor' then
+    if not self._editor_initialized then
+      self:init_editor_segments()
+    end
+    self:render_editor_tab()
+  else
+    self:render_table()
+  end
 
   self.confirmation_popup:render()
   self.transcript_editor:render()
@@ -478,7 +501,166 @@ function TranscriptUI:handle_export()
 end
 
 function TranscriptUI:handle_refresh()
-  self.transcript:regenerate()
+  if self._active_inner_tab == 'editor' then
+    self:apply_editor_to_timeline()
+  else
+    self._editor_initialized = false
+    self.transcript:regenerate()
+  end
+end
+
+function TranscriptUI:init_editor_segments()
+  self.editor_segments = {}
+  for _, seg in ipairs(self.transcript:get_segments()) do
+    table.insert(self.editor_segments, {
+      text = seg:get('text', ''),
+      deleted = false,
+      segment = seg,
+    })
+  end
+  self._editor_initialized = true
+end
+
+function TranscriptUI:render_editor_tab()
+  if #self.editor_segments == 0 then
+    ImGui.TextDisabled(Ctx(), "No segments. Transcribe audio first, then switch to this tab.")
+    return
+  end
+
+  ImGui.TextDisabled(Ctx(), "Edit text, delete or reorder segments, then click Refresh to update the timeline.")
+  ImGui.Separator(Ctx())
+
+  local avail_w, avail_h = ImGui.GetContentRegionAvail(Ctx())
+  if ImGui.BeginChild(Ctx(), '##editor_scroll', avail_w, avail_h - 5, ImGui.ChildFlags_None()) then
+    Trap(function()
+      local n = #self.editor_segments
+      for i, editor_seg in ipairs(self.editor_segments) do
+        ImGui.PushID(Ctx(), i)
+        Trap(function()
+          -- Up button
+          ImGui.BeginDisabled(Ctx(), i == 1)
+          if ImGui.Button(Ctx(), ' ^ ', 0, 0) then
+            self.editor_segments[i], self.editor_segments[i - 1] =
+              self.editor_segments[i - 1], self.editor_segments[i]
+          end
+          ImGui.EndDisabled(Ctx())
+          if ImGui.IsItemHovered(Ctx()) then
+            ImGui.SetTooltip(Ctx(), 'Move up')
+          end
+
+          ImGui.SameLine(Ctx())
+
+          -- Down button
+          ImGui.BeginDisabled(Ctx(), i == n)
+          if ImGui.Button(Ctx(), ' v ', 0, 0) then
+            self.editor_segments[i], self.editor_segments[i + 1] =
+              self.editor_segments[i + 1], self.editor_segments[i]
+          end
+          ImGui.EndDisabled(Ctx())
+          if ImGui.IsItemHovered(Ctx()) then
+            ImGui.SetTooltip(Ctx(), 'Move down')
+          end
+
+          ImGui.SameLine(Ctx())
+
+          -- Delete/restore toggle
+          local del_label = editor_seg.deleted and '[+]' or '[X]'
+          if ImGui.Button(Ctx(), del_label, 0, 0) then
+            editor_seg.deleted = not editor_seg.deleted
+          end
+          if ImGui.IsItemHovered(Ctx()) then
+            ImGui.SetTooltip(Ctx(), editor_seg.deleted and 'Restore segment' or 'Delete segment')
+          end
+
+          ImGui.SameLine(Ctx())
+
+          -- Timestamp button (click to navigate to segment on timeline)
+          local ts = reaper.format_timestr(editor_seg.segment:timeline_start_time(), '')
+          if ImGui.Button(Ctx(), ts, 70, 0) then
+            editor_seg.segment:navigate(nil, self.autoplay)
+          end
+          if ImGui.IsItemHovered(Ctx()) then
+            ImGui.SetTooltip(Ctx(), 'Navigate to segment')
+          end
+
+          ImGui.SameLine(Ctx())
+
+          -- Editable text input (fills remaining width)
+          if editor_seg.deleted then
+            ImGui.BeginDisabled(Ctx())
+          end
+          ImGui.SetNextItemWidth(Ctx(), -1)
+          local changed, new_text = ImGui.InputText(Ctx(), '##text', editor_seg.text)
+          if changed then
+            editor_seg.text = new_text
+          end
+          if editor_seg.deleted then
+            ImGui.EndDisabled(Ctx())
+          end
+        end)
+        ImGui.PopID(Ctx())
+      end
+    end)
+  end
+  ImGui.EndChild(Ctx())
+end
+
+function TranscriptUI:apply_editor_to_timeline()
+  -- Collect retained segments in current (possibly reordered) order
+  local retained = {}
+  for _, editor_seg in ipairs(self.editor_segments) do
+    if not editor_seg.deleted then
+      table.insert(retained, editor_seg)
+    end
+  end
+
+  if #retained == 0 then
+    reaper.ShowConsoleMsg("ReaSpeech: No segments retained — nothing to place on timeline.\n")
+    return
+  end
+
+  reaper.Undo_BeginBlock()
+
+  -- Create a new track for the rearranged audio
+  local track_idx = reaper.CountTracks(0)
+  reaper.InsertTrackAtIndex(track_idx, false)
+  local new_track = reaper.GetTrack(0, track_idx)
+  reaper.GetSetMediaTrackInfo_String(new_track, 'P_NAME', 'ReaSpeech Recut', true)
+
+  -- Place each retained segment sequentially with no gaps
+  local cursor = 0.0
+  for _, editor_seg in ipairs(retained) do
+    local seg = editor_seg.segment
+
+    -- Apply text edits back to segment data
+    seg.data.text = editor_seg.text
+
+    local file_path = seg:get_source_path()
+    if not file_path or file_path == '' then
+      file_path = seg.data._source_path
+    end
+
+    if file_path and file_path ~= '' and reaper.file_exists(file_path) then
+      local raw_start = seg:get('raw-start', 0)
+      local raw_end   = seg:get('raw-end', 0)
+      local length    = raw_end - raw_start
+
+      if length > 0 then
+        local item = reaper.AddMediaItemToTrack(new_track)
+        reaper.SetMediaItemInfo_Value(item, 'D_POSITION', cursor)
+        reaper.SetMediaItemInfo_Value(item, 'D_LENGTH', length)
+        local take = reaper.AddTakeToMediaItem(item)
+        local pcm_source = reaper.PCM_Source_CreateFromFile(file_path)
+        reaper.SetMediaItemTake_Source(take, pcm_source)
+        reaper.SetMediaItemTakeInfo_Value(take, 'D_STARTOFFS', raw_start)
+        cursor = cursor + length
+      end
+    end
+  end
+
+  reaper.UpdateArrange()
+  reaper.UpdateTimeline()
+  reaper.Undo_EndBlock('ReaSpeech: Apply editor to timeline', -1)
 end
 
 function TranscriptUI:handle_transcript_clear()
