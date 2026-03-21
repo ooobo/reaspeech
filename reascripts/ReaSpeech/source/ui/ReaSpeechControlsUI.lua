@@ -232,9 +232,8 @@ end
 
 function ReaSpeechControlsUI:render_action_buttons()
   local asr_plugin = self.plugins:get_plugin('asr')
-  if not asr_plugin or not asr_plugin.controls then return end
+  if not asr_plugin then return end
 
-  local controls = asr_plugin.controls
   local worker = self.plugins.app and self.plugins.app.worker
   local executable_missing = not ReaSpeechAPI.executable_path
 
@@ -244,7 +243,7 @@ function ReaSpeechControlsUI:render_action_buttons()
   end
 
   Widgets.disable_if(progress or executable_missing, function()
-    local plugin_actions = controls.actions:actions()
+    local plugin_actions = asr_plugin:actions()
     for _, action in ipairs(plugin_actions) do
       action:render()
     end

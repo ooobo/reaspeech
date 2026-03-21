@@ -42,9 +42,9 @@ end
 
 function SettingsControls:init_model()
   -- Access the shared ASR model setting
-  local asr_plugin = self.plugin.app.plugins:get_plugin('asr')
-  if asr_plugin and asr_plugin.controls then
-    self.model_name = asr_plugin.controls.model_name
+  local asr_plugin = app.plugins:get_plugin('asr')
+  if asr_plugin and asr_plugin._controls then
+    self.model_name = asr_plugin._controls.model_name
   end
 end
 
