@@ -86,7 +86,7 @@ function ASRControls:render()
   ImGui.PushTextWrapPos(Ctx(), ImGui.GetCursorPosX(Ctx()) + avail_width)
   Trap(function()
     ImGui.TextWrapped(Ctx(),
-      "Select clips or a track you want to transcribe, and click the button on the left.\n" ..
+      "Select clips or a track you want to transcribe, and click the button on the left.\n\n" ..
       "Transcribing time depends on the speed of your computer, everything happens on device, " ..
       "nothing is sent over the internet.")
 
@@ -97,9 +97,9 @@ function ASRControls:render()
     end, Trap)
 
     ImGui.TextWrapped(Ctx(),
-      "A transcript table will open once the first file is transcribed, and progressively update.\n" ..
+      "A transcript table will open once the first file is transcribed, and progressively update.\n\n" ..
       "Hover over the text column in a row to see the full text, and click to jump to that part " ..
-      "of the audio timeline.\n" ..
+      "of the audio timeline.\n\n" ..
       "This program transcribes the full raw file, not just what is on the timeline. You will see " ..
       "in the table below which segments are on the timeline and which are not.")
 
