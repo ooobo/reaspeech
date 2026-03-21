@@ -71,6 +71,10 @@ function Fonts:load_and_attach(ctx, font_size)
   self:_detach(self.bold)
   self.bold = self:create_font('sans-serif', font_size, ImGui.FontFlags_Bold())
   self:_attach(ctx, self.bold)
+
+  self:_detach(self.small)
+  self.small = self:create_font('sans-serif', math.max(font_size - 4, self.MIN_SIZE))
+  self:_attach(ctx, self.small)
 end
 
 

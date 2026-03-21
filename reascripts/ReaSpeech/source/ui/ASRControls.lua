@@ -82,13 +82,14 @@ end
 
 function ASRControls:render_actions()
   local worker = self.plugin.app.worker
+  local executable_missing = not ReaSpeechAPI.executable_path
 
   local progress
   Trap(function ()
     progress = worker:progress()
   end)
 
-  Widgets.disable_if(progress, function()
+  Widgets.disable_if(progress or executable_missing, function()
     local plugin_actions = self.actions:actions()
     for i, action in ipairs(plugin_actions) do
       if i > 1 then ImGui.SameLine(Ctx()) end
@@ -96,9 +97,18 @@ function ASRControls:render_actions()
     end
   end)
 
-  if progress then
-    ImGui.SameLine(Ctx())
+  if executable_missing and not progress then
+    ImGui.PushStyleColor(Ctx(), ImGui.Col_Text(), 0xff6666ff)
+    Trap(function()
+      ImGui.TextWrapped(Ctx(),
+        "Parakeet executable not found. It should be in the same folder as the script, " ..
+        "called parakeet-transcribe.exe on Windows. If on macOS, you may need to open " ..
+        "Settings > Security & Privacy and allow parakeet-transcribe-macos.")
+    end)
+    ImGui.PopStyleColor(Ctx())
+  end
 
+  if progress then
     if ImGui.Button(Ctx(), "Cancel") then
       worker:cancel()
     end
@@ -109,7 +119,6 @@ function ASRControls:render_actions()
     if status then
       overlay = overlay .. ' - ' .. status
     end
-    -- Use explicit size for progress bar to fix text alignment
     ImGui.ProgressBar(Ctx(), progress, -1, 0, overlay)
   end
 end

@@ -362,8 +362,16 @@ function TranscriptUI:render_name()
       self.name_editor:render()
     else
       ImGui.Dummy(Ctx(), 1, 2)
-      ImGui.Dummy(Ctx(), 2, 0)
-      ImGui.SameLine(Ctx())
+      local icon_size = Fonts.size:get() - 1
+      if self._loading then
+        ImGui.Dummy(Ctx(), 2, 0)
+        ImGui.SameLine(Ctx())
+        self:render_spinner(icon_size)
+        ImGui.SameLine(Ctx())
+      else
+        ImGui.Dummy(Ctx(), 2, 0)
+        ImGui.SameLine(Ctx())
+      end
 
       if #self.transcript.name < 1 then
         ImGui.Text(Ctx(), "(Untitled)")
@@ -371,14 +379,9 @@ function TranscriptUI:render_name()
         ImGui.Text(Ctx(), self.transcript.name)
       end
       ImGui.SameLine(Ctx())
-      local icon_size = Fonts.size:get() - 1
       if Widgets.icon(Icons.pencil, "##edit_name", icon_size, icon_size, "Edit") then
         self._original_transcript_name = self.transcript.name
         self.editing_name = true
-      end
-      if self._loading then
-        ImGui.SameLine(Ctx())
-        self:render_spinner(icon_size)
       end
       ImGui.Dummy(Ctx(), 1, 2)
     end

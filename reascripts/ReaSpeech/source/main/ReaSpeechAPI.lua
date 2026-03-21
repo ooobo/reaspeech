@@ -61,6 +61,17 @@ function ReaSpeechAPI:find_executable(custom_path)
     return executable_path
   end
 
+  -- Check in REAPER Resources/Scripts/ReaSpeech/Speech Recognition/
+  local sep = EnvUtil.is_windows() and "\\" or "/"
+  local resources_path = reaper.GetResourcePath() .. sep
+    .. "Scripts" .. sep .. "ReaSpeech" .. sep .. "Speech Recognition" .. sep
+    .. executable_name
+  if reaper.file_exists(resources_path) then
+    self:log("Found executable in REAPER Resources: " .. resources_path)
+    self:ensure_executable(resources_path)
+    return resources_path
+  end
+
   -- Not found
   self:log("Executable not found")
   return nil

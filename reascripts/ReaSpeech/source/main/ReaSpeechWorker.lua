@@ -19,6 +19,11 @@ function ReaSpeechWorker:init()
   self.job_count = 0
   self.processing_start_time = nil
   self.last_processing_time = nil
+
+  -- Processing stats for UI display
+  self.completed_job_index = 0
+  self.total_audio_duration = 0
+  self.completed_audio_duration = 0
 end
 
 function ReaSpeechWorker:react()
@@ -112,6 +117,34 @@ function ReaSpeechWorker:status()
   end
 end
 
+function ReaSpeechWorker.format_duration(seconds)
+  local h = math.floor(seconds / 3600)
+  local m = math.floor((seconds % 3600) / 60)
+  local s = math.floor(seconds % 60)
+  return string.format("%d:%02d:%02d", h, m, s)
+end
+
+function ReaSpeechWorker:processing_stats()
+  if self.job_count == 0 then return nil end
+
+  local current_file = self.completed_job_index + 1
+  if current_file > self.job_count then
+    current_file = self.job_count
+  end
+
+  -- Estimate remaining time: 12 min audio = 1 min processing
+  local remaining_audio = self.total_audio_duration - self.completed_audio_duration
+  local estimated_remaining = remaining_audio / 12
+
+  return {
+    current_file = current_file,
+    total_files = self.job_count,
+    transcribed_duration = self.completed_audio_duration,
+    total_duration = self.total_audio_duration,
+    estimated_remaining = estimated_remaining,
+  }
+end
+
 function ReaSpeechWorker:cancel()
   local cancelled_count = #self.pending_jobs
   if self.active_job then
@@ -134,6 +167,9 @@ function ReaSpeechWorker:handle_request(request)
   -- Start timer when beginning fresh processing
   if self.job_count == 0 then
     self.processing_start_time = reaper.time_precise()
+    self.completed_job_index = 0
+    self.completed_audio_duration = 0
+    self.total_audio_duration = 0
   end
 
   -- Accumulate job count to prevent progress from resetting when new requests come in
@@ -143,9 +179,34 @@ function ReaSpeechWorker:handle_request(request)
 
   self:log("Queuing " .. #expanded_jobs .. " file(s) for transcription:")
   for i, job in ipairs(expanded_jobs) do
-    self:log("  [" .. i .. "] " .. job.audio_file)
+    -- Calculate source duration for each job
+    job.audio_duration = self:get_job_audio_duration(job)
+    self.total_audio_duration = self.total_audio_duration + job.audio_duration
+    self:log("  [" .. i .. "] " .. job.audio_file
+      .. " (" .. string.format("%.1fs", job.audio_duration) .. ")")
     table.insert(self.pending_jobs, job)
   end
+end
+
+function ReaSpeechWorker:get_job_audio_duration(job)
+  local project_entries = job.job and job.job.project_entries
+  if project_entries and project_entries[1] then
+    local take = project_entries[1].take
+    if take then
+      local source = reaper.GetMediaItemTake_Source(take)
+      if source then
+        local length, is_qn = reaper.GetMediaSourceLength(source)
+        if not is_qn and length > 0 then
+          return length
+        end
+      end
+      local item = project_entries[1].item
+      if item then
+        return reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
+      end
+    end
+  end
+  return 0
 end
 
 function ReaSpeechWorker:expand_jobs_from_request(request)
@@ -173,6 +234,9 @@ function ReaSpeechWorker:handle_job_completion(active_job)
   local result = active_job.process:result()
 
   if result then
+    self.completed_job_index = self.completed_job_index + 1
+    self.completed_audio_duration = self.completed_audio_duration
+      + (active_job.audio_duration or 0)
     self:handle_response(active_job, result)
     self.active_job = nil
     return true
