@@ -182,25 +182,46 @@ function ReaSpeechControlsUI:render_processing_stats()
   if not worker then return end
 
   local stats = worker:processing_stats()
-  if not stats then return end
-
   local logo_width = 101  -- reaspeech-logo-small width
+
+  if not stats and worker.transcription_complete then
+    Fonts.wrap(Ctx(), Fonts.small, function()
+      ImGui.PushTextWrapPos(Ctx(), ImGui.GetCursorPosX(Ctx()) + logo_width)
+      Trap(function()
+        Fonts.wrap(Ctx(), Fonts.bold, function()
+          ImGui.Text(Ctx(), "Transcription")
+        end, Trap)
+        Fonts.wrap(Ctx(), Fonts.bold, function()
+          ImGui.Text(Ctx(), "complete")
+        end, Trap)
+      end)
+      ImGui.PopTextWrapPos(Ctx())
+    end, Trap)
+    return
+  end
+
+  if not stats then return end
 
   Fonts.wrap(Ctx(), Fonts.small, function()
     ImGui.PushTextWrapPos(Ctx(), ImGui.GetCursorPosX(Ctx()) + logo_width)
     Trap(function()
+      Fonts.wrap(Ctx(), Fonts.bold, function()
+        ImGui.Text(Ctx(), "Processing file:")
+      end, Trap)
       ImGui.Text(Ctx(), string.format(
-        "Processing file %d of %d",
-        stats.current_file, stats.total_files))
-      ImGui.Text(Ctx(), string.format(
-        "Transcribed:\n%s",
-        ReaSpeechWorker.format_duration(stats.transcribed_duration)))
-      ImGui.Text(Ctx(), string.format(
-        "Total:\n%s",
-        ReaSpeechWorker.format_duration(stats.total_duration)))
-      ImGui.Text(Ctx(), string.format(
-        "Time to complete:\n~%s",
-        ReaSpeechWorker.format_duration(stats.estimated_remaining)))
+        "%d of %d", stats.current_file, stats.total_files))
+      Fonts.wrap(Ctx(), Fonts.bold, function()
+        ImGui.Text(Ctx(), "Transcribed:")
+      end, Trap)
+      ImGui.Text(Ctx(), ReaSpeechWorker.format_duration(stats.transcribed_duration))
+      Fonts.wrap(Ctx(), Fonts.bold, function()
+        ImGui.Text(Ctx(), "Total:")
+      end, Trap)
+      ImGui.Text(Ctx(), ReaSpeechWorker.format_duration(stats.total_duration))
+      Fonts.wrap(Ctx(), Fonts.bold, function()
+        ImGui.Text(Ctx(), "Time to complete:")
+      end, Trap)
+      ImGui.Text(Ctx(), "~" .. ReaSpeechWorker.format_duration(stats.estimated_remaining))
     end)
     ImGui.PopTextWrapPos(Ctx())
   end, Trap)

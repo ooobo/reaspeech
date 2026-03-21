@@ -109,17 +109,17 @@ function ASRControls:render_actions()
   end
 
   if progress then
-    if ImGui.Button(Ctx(), "Cancel") then
-      worker:cancel()
-    end
-
-    ImGui.SameLine(Ctx())
     local overlay = string.format("%.0f%%", progress * 100)
     local status = worker:status()
     if status then
       overlay = overlay .. ' - ' .. status
     end
-    ImGui.ProgressBar(Ctx(), progress, -1, 0, overlay)
+    ImGui.ProgressBar(Ctx(), progress, 250, 0, overlay)
+
+    ImGui.SameLine(Ctx())
+    if ImGui.Button(Ctx(), "Cancel") then
+      worker:cancel()
+    end
   end
 end
 

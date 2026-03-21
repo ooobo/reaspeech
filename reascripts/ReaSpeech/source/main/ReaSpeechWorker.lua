@@ -24,6 +24,7 @@ function ReaSpeechWorker:init()
   self.completed_job_index = 0
   self.total_audio_duration = 0
   self.completed_audio_duration = 0
+  self.transcription_complete = false
 end
 
 function ReaSpeechWorker:react()
@@ -75,6 +76,7 @@ function ReaSpeechWorker:react_handle_jobs()
       self.processing_start_time = nil
     end
     self:log('Processing finished')
+    self.transcription_complete = true
     self.job_count = 0
   end
 end
@@ -170,6 +172,7 @@ function ReaSpeechWorker:handle_request(request)
     self.completed_job_index = 0
     self.completed_audio_duration = 0
     self.total_audio_duration = 0
+    self.transcription_complete = false
   end
 
   -- Accumulate job count to prevent progress from resetting when new requests come in
