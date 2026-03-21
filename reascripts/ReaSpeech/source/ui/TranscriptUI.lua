@@ -16,9 +16,6 @@ TranscriptUI = Polo {
   ACTIONS_MARGIN = 8,
   ACTIONS_PADDING = 8,
 
-  SPINNER_FRAMES = { '|', '/', '-', '\\' },
-  SPINNER_INTERVAL = 0.2,  -- seconds per frame
-
   SCORE_COLORS = {
     bright_green = 0xa3ff00a6,
     dark_green = 0x2cba00a6,
@@ -197,25 +194,11 @@ function TranscriptUI:transcript_id()
 end
 
 function TranscriptUI:transcript_name()
-  local name
   if not self.transcript.name or #self.transcript.name < 1 then
-    name = 'Untitled Transcript'
-  else
-    name = TranscriptUI.TAB_TITLE_FORMAT:format(self.transcript.name)
+    return 'Untitled Transcript'
   end
 
-  if self._loading then
-    name = name .. ' ' .. self:_spinner_char()
-  end
-
-  return name
-end
-
-function TranscriptUI:_spinner_char()
-  local frames = self.SPINNER_FRAMES
-  local time = reaper.time_precise()
-  local index = math.floor(time / self.SPINNER_INTERVAL) % #frames + 1
-  return frames[index]
+  return TranscriptUI.TAB_TITLE_FORMAT:format(self.transcript.name)
 end
 
 function TranscriptUI:clipper()
@@ -393,9 +376,20 @@ function TranscriptUI:render_name()
         self._original_transcript_name = self.transcript.name
         self.editing_name = true
       end
+      if self._loading then
+        ImGui.SameLine(Ctx())
+        self:render_spinner(icon_size)
+      end
       ImGui.Dummy(Ctx(), 1, 2)
     end
   end, Trap)
+end
+
+function TranscriptUI:render_spinner(size)
+  local x, y = ImGui.GetCursorScreenPos(Ctx())
+  ImGui.Dummy(Ctx(), size, size)
+  local dl = ImGui.GetWindowDrawList(Ctx())
+  Icons.spinner(dl, x, y, size, size, 0xffffffff)
 end
 
 function TranscriptUI:render_result_actions()

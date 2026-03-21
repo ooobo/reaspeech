@@ -128,6 +128,32 @@ function Icons._gear_points(center_x, center_y, inner_radius, outer_radius, num_
   return points
 end
 
+function Icons.spinner(dl, x, y, w, h, color)
+  local cx = x + w * 0.5
+  local cy = y + h * 0.5
+  local radius = w * 0.45
+  local num_dots = 8
+  local time = reaper.time_precise()
+  local active = math.floor(time / 0.1) % num_dots
+
+  for i = 0, num_dots - 1 do
+    local angle = (i / num_dots) * 2 * math.pi - math.pi / 2
+    local dx = cx + radius * math.cos(angle)
+    local dy = cy + radius * math.sin(angle)
+
+    -- Fade dots based on distance from active dot
+    local dist = (i - active) % num_dots
+    local alpha = math.max(0.15, 1.0 - dist * 0.12)
+    local dot_radius = w * 0.08
+
+    -- Apply alpha to color (color is 0xRRGGBBAA)
+    local base_rgb = color & 0xFFFFFF00
+    local dot_color = base_rgb | math.floor(alpha * 255)
+
+    ImGui.DrawList_AddCircleFilled(dl, dx, dy, dot_radius, dot_color, 8)
+  end
+end
+
 function Icons.info(dl, x, y, w, h, color)
   ImGui.DrawList_AddCircle(
     dl,
