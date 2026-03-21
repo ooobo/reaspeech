@@ -10,7 +10,7 @@ TranscriptUI = Polo {
 
   FLOAT_FORMAT = '%.4f',
 
-  COLUMN_WIDTH = 55,
+  COLUMN_WIDTH = 70,
   LARGE_COLUMN_WIDTH = 300,
 
   ACTIONS_MARGIN = 8,

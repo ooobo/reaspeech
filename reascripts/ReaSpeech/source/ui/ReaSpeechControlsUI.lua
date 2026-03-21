@@ -63,6 +63,7 @@ function ReaSpeechControlsUI:render()
   Trap(function()
     Widgets.png('reaspeech-logo-small')
     self:render_processing_stats()
+    self:render_action_buttons()
   end)
   ImGui.EndGroup(Ctx())
 
@@ -227,6 +228,46 @@ function ReaSpeechControlsUI:render_processing_stats()
     end, Trap)
   end)
   ImGui.PopTextWrapPos(Ctx())
+end
+
+function ReaSpeechControlsUI:render_action_buttons()
+  local asr_plugin = self.plugins:get_plugin('asr')
+  if not asr_plugin or not asr_plugin.controls then return end
+
+  local controls = asr_plugin.controls
+  local worker = self.plugins.app and self.plugins.app.worker
+  local executable_missing = not ReaSpeechAPI.executable_path
+
+  local progress
+  if worker then
+    Trap(function() progress = worker:progress() end)
+  end
+
+  Widgets.disable_if(progress or executable_missing, function()
+    local plugin_actions = controls.actions:actions()
+    for _, action in ipairs(plugin_actions) do
+      action:render()
+    end
+  end)
+
+  if executable_missing and not progress then
+    ImGui.PushStyleColor(Ctx(), ImGui.Col_Text(), 0xff6666ff)
+    Trap(function()
+      ImGui.PushTextWrapPos(Ctx(), ImGui.GetCursorPosX(Ctx()) + 101)
+      Trap(function()
+        ImGui.TextWrapped(Ctx(),
+          "Parakeet executable not found.")
+      end)
+      ImGui.PopTextWrapPos(Ctx())
+    end)
+    ImGui.PopStyleColor(Ctx())
+  end
+
+  if progress and worker then
+    if ImGui.Button(Ctx(), "Cancel") then
+      worker:cancel()
+    end
+  end
 end
 
 function ReaSpeechControlsUI:render_heading()

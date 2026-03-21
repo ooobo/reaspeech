@@ -58,79 +58,16 @@ function ASRControls:init_model_name()
 end
 
 function ASRControls:init_layouts()
-  self:init_simple_layout()
   self:init_actions_layout()
 end
 
-function ASRControls:init_simple_layout()
-  local renderers = {self.render_model}
-
-  self.simple_layout = ColumnLayout.new {
-    column_padding = ReaSpeechControlsUI.COLUMN_PADDING,
-    margin_bottom = ReaSpeechControlsUI.MARGIN_BOTTOM,
-    margin_left = ReaSpeechControlsUI.MARGIN_LEFT,
-    margin_right = ReaSpeechControlsUI.MARGIN_RIGHT,
-    num_columns = #renderers,
-
-    render_column = function (column)
-      ImGui.PushItemWidth(Ctx(), column.width)
-      Trap(function () renderers[column.num](self, column) end)
-      ImGui.PopItemWidth(Ctx())
-    end
-  }
-end
-
-function ASRControls:render_actions()
-  local worker = self.plugin.app.worker
-  local executable_missing = not ReaSpeechAPI.executable_path
-
-  local progress
-  Trap(function ()
-    progress = worker:progress()
-  end)
-
-  Widgets.disable_if(progress or executable_missing, function()
-    local plugin_actions = self.actions:actions()
-    for i, action in ipairs(plugin_actions) do
-      if i > 1 then ImGui.SameLine(Ctx()) end
-      action:render()
-    end
-  end)
-
-  if executable_missing and not progress then
-    ImGui.PushStyleColor(Ctx(), ImGui.Col_Text(), 0xff6666ff)
-    Trap(function()
-      ImGui.TextWrapped(Ctx(),
-        "Parakeet executable not found. It should be in the same folder as the script, " ..
-        "called parakeet-transcribe.exe on Windows. If on macOS, you may need to open " ..
-        "Settings > Security & Privacy and allow parakeet-transcribe-macos.")
-    end)
-    ImGui.PopStyleColor(Ctx())
-  end
-
-  if progress then
-    local overlay = string.format("%.0f%%", progress * 100)
-    local status = worker:status()
-    if status then
-      overlay = overlay .. ' - ' .. status
-    end
-    ImGui.ProgressBar(Ctx(), progress, 400, 0, overlay)
-
-    ImGui.SameLine(Ctx())
-    if ImGui.Button(Ctx(), "Cancel") then
-      worker:cancel()
-    end
-  end
-end
-
 function ASRControls:init_actions_layout()
+  -- Actions are now rendered in ReaSpeechControlsUI below the logo
   self.actions_layout = ColumnLayout.new {
     column_padding = 10,
     margin_left = ReaSpeechControlsUI.MARGIN_LEFT,
     num_columns = 1,
-    render_column = function(_column)
-      self:render_actions()
-    end
+    render_column = function(_column) end
   }
 end
 
@@ -139,14 +76,8 @@ function ASRControls:render_bg()
 end
 
 function ASRControls:render()
-  self.simple_layout:render()
-  ImGui.Spacing(Ctx())
   self.actions_layout:render()
   self.alert_popup:render()
-end
-
-function ASRControls:render_model()
-  self.model_name:render()
 end
 
 function ASRControls:get_request_data()

@@ -35,12 +35,21 @@ function SettingsControls:init()
     max = Fonts.MAX_SIZE,
   }
 
+  self:init_model()
   self:init_logging()
   self:init_layout()
 end
 
+function SettingsControls:init_model()
+  -- Access the shared ASR model setting
+  local asr_plugin = self.plugin.app.plugins:get_plugin('asr')
+  if asr_plugin and asr_plugin.controls then
+    self.model_name = asr_plugin.controls.model_name
+  end
+end
+
 function SettingsControls:init_layout()
-  local renderers = { self.render_font_size, self.render_logging }
+  local renderers = { self.render_font_size, self.render_model, self.render_logging }
 
   self.layout = ColumnLayout.new {
     column_padding = ReaSpeechControlsUI.COLUMN_PADDING,
@@ -75,6 +84,12 @@ end
 
 function SettingsControls:render_font_size()
   self.font_size:render()
+end
+
+function SettingsControls:render_model()
+  if self.model_name then
+    self.model_name:render()
+  end
 end
 
 function SettingsControls:render_logging()
