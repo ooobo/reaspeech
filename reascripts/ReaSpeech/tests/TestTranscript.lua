@@ -113,7 +113,7 @@ function TestTranscript:testColumnOrder()
     avg_logprob = 0.5
   })
   local columns = t:get_columns()
-  lu.assertEquals(columns, {"id", "start", "end", "text", "score", "file", "avg_logprob"})
+  lu.assertEquals(columns, {"id", "start", "end", "raw-start", "raw-end", "text", "score", "file", "avg_logprob"})
 end
 
 function TestTranscript:testFileColumn()
