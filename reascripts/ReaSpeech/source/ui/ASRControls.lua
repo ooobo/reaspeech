@@ -92,7 +92,7 @@ function ASRControls:render()
 
     ImGui.Spacing(Ctx())
 
-    Fonts.wrap(Ctx(), Fonts().bold, function()
+    Fonts.wrap(Ctx(), Fonts.bold, function()
       ImGui.Text(Ctx(), "Using the transcript")
     end, Trap)
 
