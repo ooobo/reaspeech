@@ -26,9 +26,16 @@ function TranscriptSegment:init()
   assert(self.item, 'missing item')
   assert(self.take, 'missing take')
   self.data = self._copy(self.data)
-  self.data['file'] = self:get_file()
-  -- Store full source path for later insertion if item is deleted
-  self.data['_source_path'] = self:get_source_path()
+  -- Only update file/source_path if take is valid; preserve existing values
+  -- when clips have been deleted from the timeline
+  local file = self:get_file()
+  if file ~= '' then
+    self.data['file'] = file
+  end
+  local source_path = self:get_source_path()
+  if source_path ~= '' then
+    self.data['_source_path'] = source_path
+  end
 end
 
 TranscriptSegment.from_whisper = function(segment, item, take)

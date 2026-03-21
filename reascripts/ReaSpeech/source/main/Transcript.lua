@@ -109,6 +109,9 @@ function Transcript:regenerate()
     local path = transcription.path
     local segments = transcription.segments
 
+    -- Derive filename from path for fallback when take is invalid
+    local fallback_file = path:gsub(".*[\\/](.*)", "%1"):gsub("(.*)[.].*", "%1")
+
     -- Find all items/takes on timeline that use this file
     local matching_items = self:find_items_by_path(path)
 
@@ -155,6 +158,13 @@ function Transcript:regenerate()
 
           for _, s in pairs(from_whisper) do
             if s:get('text') then
+              -- Ensure file/source_path are set even when take is stale
+              if not s.data['file'] or s.data['file'] == '' then
+                s.data['file'] = fallback_file
+              end
+              if not s.data['_source_path'] or s.data['_source_path'] == '' then
+                s.data['_source_path'] = path
+              end
               self:add_segment(s)
             end
           end
