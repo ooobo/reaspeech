@@ -91,16 +91,17 @@ function ASRControls:render()
       "nothing is sent over the internet.")
 
     ImGui.Spacing(Ctx())
+    ImGui.Spacing(Ctx())
 
     Fonts.wrap(Ctx(), Fonts.bold, function()
       ImGui.Text(Ctx(), "Using the transcript")
     end, Trap)
 
     ImGui.TextWrapped(Ctx(),
-      "A transcript table will open once the first file is transcribed, and progressively update.\n\n" ..
-      "Hover over the text column in a row to see the full text, and click to jump to that part " ..
+      "- A transcript table will open once the first file is transcribed, and progressively update.\n\n" ..
+      "- Hover over the text column in a row to see the full text, and click to jump to that part " ..
       "of the audio timeline.\n\n" ..
-      "This program transcribes the full raw file, not just what is on the timeline. You will see " ..
+      "- This program transcribes the full raw file, not just what is on the timeline. You will see " ..
       "in the table below which segments are on the timeline and which are not.")
 
     ImGui.Spacing(Ctx())
