@@ -115,6 +115,8 @@ function ReaSpeechAPI:transcribe(audio_file, options)
   -- Add shell redirection (via_tempfile handles shell execution)
   local cmd_with_redirect = command .. ' > "' .. stdout_file .. '" 2> "' .. stderr_file .. '"'
 
+  self:log("Executing: " .. command)
+
   -- Record start time
   local start_time = reaper.time_precise()
 

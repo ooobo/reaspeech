@@ -113,11 +113,19 @@ function ReaSpeechWorker:status()
 end
 
 function ReaSpeechWorker:cancel()
+  local cancelled_count = #self.pending_jobs
   if self.active_job then
+    cancelled_count = cancelled_count + 1
+    self:log("Cancelling active job: " .. (self.active_job.audio_file or "unknown"))
+    self:log("Note: background process will continue running until it finishes")
     self.active_job = nil
+  end
+  if #self.pending_jobs > 0 then
+    self:log("Cancelling " .. #self.pending_jobs .. " pending job(s)")
   end
   self.pending_jobs = {}
   self.job_count = 0
+  self:log("Cancelled " .. cancelled_count .. " job(s)")
 end
 
 function ReaSpeechWorker:handle_request(request)
@@ -131,7 +139,11 @@ function ReaSpeechWorker:handle_request(request)
   -- Accumulate job count to prevent progress from resetting when new requests come in
   self.job_count = self.job_count + #request.jobs
 
-  for _, job in ipairs(self:expand_jobs_from_request(request)) do
+  local expanded_jobs = self:expand_jobs_from_request(request)
+
+  self:log("Queuing " .. #expanded_jobs .. " file(s) for transcription:")
+  for i, job in ipairs(expanded_jobs) do
+    self:log("  [" .. i .. "] " .. job.audio_file)
     table.insert(self.pending_jobs, job)
   end
 end
@@ -156,7 +168,7 @@ end
 
 -- May return true if the job has completed and should no longer be active
 function ReaSpeechWorker:handle_job_completion(active_job)
-  self:debug('Job completed: ' .. dump(active_job))
+  self:log("Completed transcription: " .. active_job.audio_file)
 
   local result = active_job.process:result()
 
@@ -187,6 +199,8 @@ function ReaSpeechWorker:start_active_job()
   end
 
   local active_job = self.active_job
+
+  self:log("Starting transcription: " .. active_job.audio_file)
 
   active_job.process = ReaSpeechAPI:transcribe(
     active_job.audio_file,
