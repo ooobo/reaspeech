@@ -24,6 +24,7 @@ function ReaSpeechWorker:init()
   self.completed_job_index = 0
   self.total_audio_duration = 0
   self.completed_audio_duration = 0
+  self.completed_wall_time = 0
   self.transcription_complete = false
 end
 
@@ -134,9 +135,16 @@ function ReaSpeechWorker:processing_stats()
     current_file = self.job_count
   end
 
-  -- Estimate remaining time: 12 min audio = 1 min processing
   local remaining_audio = self.total_audio_duration - self.completed_audio_duration
-  local estimated_remaining = remaining_audio / 12
+  local estimated_remaining
+  if self.completed_audio_duration > 0 and self.completed_wall_time > 0 then
+    -- Use measured speed ratio from completed files
+    local speed_ratio = self.completed_audio_duration / self.completed_wall_time
+    estimated_remaining = remaining_audio / speed_ratio
+  else
+    -- Default estimate before any file completes: 12x realtime
+    estimated_remaining = remaining_audio / 12
+  end
 
   return {
     current_file = current_file,
@@ -171,6 +179,7 @@ function ReaSpeechWorker:handle_request(request)
     self.processing_start_time = reaper.time_precise()
     self.completed_job_index = 0
     self.completed_audio_duration = 0
+    self.completed_wall_time = 0
     self.total_audio_duration = 0
     self.transcription_complete = false
   end
@@ -240,6 +249,10 @@ function ReaSpeechWorker:handle_job_completion(active_job)
     self.completed_job_index = self.completed_job_index + 1
     self.completed_audio_duration = self.completed_audio_duration
       + (active_job.audio_duration or 0)
+    if active_job.process and active_job.process.start_time then
+      self.completed_wall_time = self.completed_wall_time
+        + (reaper.time_precise() - active_job.process.start_time)
+    end
     self:handle_response(active_job, result)
     self.active_job = nil
     return true
