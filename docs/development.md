@@ -57,13 +57,26 @@ enabling you to make changes to the Lua files and see the changes reflected in
 REAPER without having to rebuild the ReaScripts. To use this file, add it as
 an action in REAPER.
 
-### Transcription executable
+# Fork
+
+Why an executable? I wanted to use NVIDIA's Parakeet TDT model, Docker or a 
+web server isn't an option in a lot of studio/editing environments and felt a 
+bit insane trying to run it through python. Offloading the complexity to a 
+executable that Reaper can just call prevents a lot of mucking around, and I
+already had such an executable from another project. Most of the changes to
+the original repo were made with Claude in a small amount of time, so can't 
+vouch for it's realiability. 
+
+Most of the lua code is from the original (the bones are the hard part), 
+just with some UI changes and added functionality.
+
+## Transcription executable
 
 The Rust transcription executable is maintained in a separate repository:
 [ooobo/parakeet-transcribe](https://github.com/ooobo/parakeet-transcribe)
 
 To build locally, clone that repo and run:
-- **Windows:** `cargo build --release --bin parakeet-transcribe-windows`
+- **Windows:** `cargo build --release --bin parakeet-transcribe`
 - **macOS:** `cargo build --release --bin parakeet-transcribe-macos`
 
 The compiled binary must be placed in the same folder as `ReaSpeech.lua`.
@@ -71,7 +84,7 @@ The compiled binary must be placed in the same folder as `ReaSpeech.lua`.
 For releases, pre-built binaries are automatically downloaded from
 `ooobo/parakeet-transcribe` by the GitHub Actions workflow.
 
-### Creating a release
+## Creating a release
 
 Releases are built by GitHub Actions and published to the
 [ReaPack repository](https://github.com/ooobo/reaspeech/raw/beta/index.xml).
