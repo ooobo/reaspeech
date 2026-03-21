@@ -52,7 +52,7 @@ function ASRControls:init_model_name()
     state = self.settings.model_name,
     label = 'Model',
     help_text = self.HELP_MODEL,
-    items = WhisperModels.get_model_names(self.asr_engine),
+    items = Models.get_model_names(self.asr_engine),
     item_labels = self:get_model_labels(),
   }
 end
@@ -121,7 +121,7 @@ end
 function ASRControls:get_model_labels()
   local model_labels = {}
 
-  for _, model in pairs(WhisperModels.MODELS) do
+  for _, model in pairs(Models.MODELS) do
     model_labels[model.name] = model.label
   end
 

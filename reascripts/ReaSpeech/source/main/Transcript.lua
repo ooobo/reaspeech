@@ -135,9 +135,9 @@ function Transcript:regenerate()
           -- Check if segment overlaps the clipped portion
           if segment['end'] > startoffs and segment.start < clip_end then
             -- Create segment for this item/take
-            local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+            local from_response = TranscriptSegment.from_response(segment, item, take)
 
-            for _, s in pairs(from_whisper) do
+            for _, s in pairs(from_response) do
               if s:get('text') then
                 self:add_segment(s)
                 created_any = true
@@ -154,9 +154,9 @@ function Transcript:regenerate()
         local take = matching_items[1] and matching_items[1].take or transcription.fallback_take
 
         if item and take then
-          local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+          local from_response = TranscriptSegment.from_response(segment, item, take)
 
-          for _, s in pairs(from_whisper) do
+          for _, s in pairs(from_response) do
             if s:get('text') then
               -- Ensure file/source_path are set even when take is stale
               if not s.data['file'] or s.data['file'] == '' then

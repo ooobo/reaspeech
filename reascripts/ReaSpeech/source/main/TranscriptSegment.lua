@@ -38,7 +38,7 @@ function TranscriptSegment:init()
   end
 end
 
-TranscriptSegment.from_whisper = function(segment, item, take)
+TranscriptSegment.from_response = function(segment, item, take)
   local result = {}
   local words = segment.words
 

@@ -7,7 +7,7 @@ local transcript = Transcript.new {
 }
 
 for _, segment in pairs(response.segments) do
-  for _, s in pairs(TranscriptSegment.from_whisper(segment, {}, {})) do
+  for _, s in pairs(TranscriptSegment.from_response(segment, {}, {})) do
     transcript:add_segment(s)
   end
 end

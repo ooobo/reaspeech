@@ -107,9 +107,9 @@ function ASRPlugin:handle_response(job_count)
         -- Check if segment overlaps the clipped portion
         if segment['end'] > startoffs and segment.start < clip_end then
           -- Create segment for this item/take
-          local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+          local from_response = TranscriptSegment.from_response(segment, item, take)
 
-          for _, s in pairs(from_whisper) do
+          for _, s in pairs(from_response) do
             if s:get('text') then
               transcript:add_segment(s)
               created_any = true
@@ -122,9 +122,9 @@ function ASRPlugin:handle_response(job_count)
       if not created_any and job.project_entries[1] then
         local item = job.project_entries[1].item
         local take = job.project_entries[1].take
-        local from_whisper = TranscriptSegment.from_whisper(segment, item, take)
+        local from_response = TranscriptSegment.from_response(segment, item, take)
 
-        for _, s in pairs(from_whisper) do
+        for _, s in pairs(from_response) do
           if s:get('text') then
             transcript:add_segment(s)
           end

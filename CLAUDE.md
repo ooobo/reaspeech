@@ -10,7 +10,7 @@ ReaSpeech uses a local Rust executable (parakeet-rs) for Parakeet TDT ASR transc
 - ✅ Rust-based transcription using parakeet-rs 0.2.6 from crates.io
 - ✅ Modified `ReaSpeechAPI.lua` for local executable execution
 - ✅ Simplified `ReaSpeechWorker.lua` (removed HTTP polling)
-- ✅ Updated UI components (ASRControls, ASRPlugin, WhisperModels)
+- ✅ Updated UI components (ASRControls, ASRPlugin, Models)
 - ✅ GitHub Actions workflow builds Windows and macOS executables
 - ✅ Completion marker file for reliable detection
 - ✅ Both v2 and v3 Parakeet models supported (dynamic vocab_size)
