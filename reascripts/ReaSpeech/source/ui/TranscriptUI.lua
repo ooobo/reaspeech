@@ -673,17 +673,28 @@ function TranscriptUI:render_editor_document()
 
     -- Handle clicks on this word
     if ImGui.IsItemHovered(Ctx()) then
-      ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_TextInput())
+      if ImGui.MouseCursor_TextInput then
+        ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_TextInput())
+      else
+        ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_Hand())
+      end
 
       if ImGui.IsMouseClicked(Ctx(), 0) then
         -- Place cursor at left or right edge based on click position
-        local rx = select(1, ImGui.GetItemRectMin(Ctx()))
-        local rx2 = select(1, ImGui.GetItemRectMax(Ctx()))
-        local mx = select(1, ImGui.GetMousePos(Ctx()))
-        local mid = (rx + rx2) / 2
-        local new_cursor = (mx < mid) and (i - 1) or i
+        local new_cursor = i  -- default: after word
+        if ImGui.GetMousePos then
+          local rx = select(1, ImGui.GetItemRectMin(Ctx()))
+          local rx2 = select(1, ImGui.GetItemRectMax(Ctx()))
+          local mx = select(1, ImGui.GetMousePos(Ctx()))
+          local mid = (rx + rx2) / 2
+          if mx < mid then
+            new_cursor = i - 1
+          end
+        end
 
-        if ImGui.IsKeyDown(Ctx(), ImGui.Mod_Shift()) then
+        local shift_held = ImGui.IsKeyDown and ImGui.Mod_Shift
+            and ImGui.IsKeyDown(Ctx(), ImGui.Mod_Shift())
+        if shift_held then
           if not self._sel_anchor then
             self._sel_anchor = self._cursor
           end
@@ -728,16 +739,20 @@ end
 function TranscriptUI:handle_editor_keys()
   if #self._flat_words == 0 then return end
 
-  -- Delete / Backspace: mark selected words as deleted
-  local del = ImGui.IsKeyPressed(Ctx(), ImGui.Key_Delete())
-  local bs = ImGui.IsKeyPressed(Ctx(), ImGui.Key_Backspace())
+  local function is_shift_held()
+    return ImGui.IsKeyDown and ImGui.Mod_Shift
+        and ImGui.IsKeyDown(Ctx(), ImGui.Mod_Shift())
+  end
+
+  -- Delete / Backspace: toggle deletion on selected words
+  local del = ImGui.Key_Delete and ImGui.IsKeyPressed(Ctx(), ImGui.Key_Delete())
+  local bs = ImGui.Key_Backspace and ImGui.IsKeyPressed(Ctx(), ImGui.Key_Backspace())
   if del or bs then
     local sel_min, sel_max = self:editor_selection_range()
     if sel_min then
       for i = sel_min, sel_max do
         self._flat_words[i].deleted = not self._flat_words[i].deleted
       end
-      -- Move cursor to start of selection
       self._cursor = sel_min - 1
       self._sel_anchor = nil
       self._cursor_changed_time = reaper.time_precise()
@@ -746,7 +761,7 @@ function TranscriptUI:handle_editor_keys()
 
   -- Left arrow
   if ImGui.IsKeyPressed(Ctx(), ImGui.Key_LeftArrow()) then
-    if ImGui.IsKeyDown(Ctx(), ImGui.Mod_Shift()) then
+    if is_shift_held() then
       if not self._sel_anchor then
         self._sel_anchor = self._cursor
       end
@@ -761,7 +776,7 @@ function TranscriptUI:handle_editor_keys()
 
   -- Right arrow
   if ImGui.IsKeyPressed(Ctx(), ImGui.Key_RightArrow()) then
-    if ImGui.IsKeyDown(Ctx(), ImGui.Mod_Shift()) then
+    if is_shift_held() then
       if not self._sel_anchor then
         self._sel_anchor = self._cursor
       end
@@ -775,8 +790,9 @@ function TranscriptUI:handle_editor_keys()
   end
 
   -- Ctrl+A: select all
-  if ImGui.IsKeyDown(Ctx(), ImGui.Mod_Ctrl()) and
-     ImGui.IsKeyPressed(Ctx(), ImGui.Key_A()) then
+  if ImGui.Mod_Ctrl and ImGui.Key_A
+     and ImGui.IsKeyDown(Ctx(), ImGui.Mod_Ctrl())
+     and ImGui.IsKeyPressed(Ctx(), ImGui.Key_A()) then
     self._sel_anchor = 0
     self._cursor = #self._flat_words
   end
