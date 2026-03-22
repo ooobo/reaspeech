@@ -1123,12 +1123,16 @@ end
 
 function TranscriptUI:render_text_words(segment, _)
   if segment.words then
-    for i, word in pairs(segment.words) do
-      if i > 1 then
+    local first = true
+    for i, word in ipairs(segment.words) do
+      if not first then
         ImGui.SameLine(Ctx(), 0, 0)
-        ImGui.Text(Ctx(), ' ')
-        ImGui.SameLine(Ctx(), 0, 0)
+        if word.word_start then
+          ImGui.Text(Ctx(), ' ')
+          ImGui.SameLine(Ctx(), 0, 0)
+        end
       end
+      first = false
       local color = nil
       if self.colorize_words then
         color = self.score_color(word:score())

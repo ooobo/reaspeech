@@ -183,7 +183,9 @@ function TranscriptEditor:render_words()
     end
 
     if i < num_words and i % self.WORDS_PER_LINE ~= 0 then
-      ImGui.SameLine(Ctx(), 0, spacing)
+      local next_word = words[i + 1]
+      local gap = (next_word and not next_word.word_start) and 0 or spacing
+      ImGui.SameLine(Ctx(), 0, gap)
     end
   end
 

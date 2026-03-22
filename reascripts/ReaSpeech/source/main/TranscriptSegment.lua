@@ -38,38 +38,56 @@ function TranscriptSegment:init()
   end
 end
 
+TranscriptSegment._tokens_to_words = function(tokens)
+  local words = {}
+  for _, tok in ipairs(tokens) do
+    local text = tok.token
+    local word_start = text:match('^[%s\xe2\x96\x81]') ~= nil or #words == 0
+    text = text:match('^[\xe2\x96\x81%s]+(.*)') or text
+    if #text == 0 then goto continue end
+    table.insert(words, TranscriptWord.new({
+      word = text,
+      word_start = word_start,
+      start = tok.start,
+      end_ = tok['end'],
+      probability = tok.probability or 1.0,
+    }))
+    ::continue::
+  end
+  return words
+end
+
 TranscriptSegment.from_response = function(segment, item, take)
   local result = {}
-  local words = segment.words
+  local raw_words = segment.words
+  local raw_tokens = segment.tokens
 
   segment = TranscriptSegment._copy(segment)
   segment.text = segment.text:match("^%s*(.-)%s*$")
   segment.words = nil
+  segment.tokens = nil
 
-  if words then
-    local transcript_words = {}
-    for _, word in pairs(words) do
-      local transcript_word = TranscriptWord.new({
+  local transcript_words = nil
+  if raw_tokens then
+    transcript_words = TranscriptSegment._tokens_to_words(raw_tokens)
+  elseif raw_words then
+    transcript_words = {}
+    for _, word in pairs(raw_words) do
+      table.insert(transcript_words, TranscriptWord.new({
         word = word.word:match("^%s*(.-)%s*$"),
         probability = word.probability,
         start = word.start,
         end_ = word['end']
-      })
-      table.insert(transcript_words, transcript_word)
+      }))
     end
-    table.insert(result, TranscriptSegment.new({
-      data = segment,
-      item = item,
-      take = take,
-      words = transcript_words
-    }))
-  else
-    table.insert(result, TranscriptSegment.new({
-      data = segment,
-      item = item,
-      take = take
-    }))
   end
+
+  table.insert(result, TranscriptSegment.new({
+    data = segment,
+    item = item,
+    take = take,
+    words = transcript_words
+  }))
 
   return result
 end
@@ -116,8 +134,10 @@ end
 TranscriptSegment.merge_words = function(words, index1, index2)
   local word1 = words[index1]
   local word2 = words[index2]
+  local sep = (word2.word_start and word1.word_start) and ' ' or ''
   local new_word = TranscriptWord.new {
-    word = word1.word .. word2.word,
+    word = word1.word .. sep .. word2.word,
+    word_start = word1.word_start,
     start = word1.start,
     end_ = word2.end_,
     probability = (word1.probability + word2.probability) / 2
@@ -194,11 +214,14 @@ function TranscriptSegment:set_words(words)
 end
 
 function TranscriptSegment:update_text()
-  local text_chunks = {}
-  for _, word in pairs(self.words) do
-    table.insert(text_chunks, word.word)
+  local parts = {}
+  for _, word in ipairs(self.words) do
+    if word.word_start and #parts > 0 then
+      table.insert(parts, ' ')
+    end
+    table.insert(parts, word.word)
   end
-  self.data['text'] = table.concat(text_chunks, ' ')
+  self.data['text'] = table.concat(parts)
 end
 
 function TranscriptSegment:get_file(include_extensions)

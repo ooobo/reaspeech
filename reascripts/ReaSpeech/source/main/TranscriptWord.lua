@@ -11,6 +11,7 @@ function TranscriptWord:init()
   assert(self.start, 'missing start')
   assert(self.end_, 'missing end_')
   assert(self.probability, 'missing probability')
+  self.word_start = (self.word_start ~= false)
 end
 
 function TranscriptWord:copy()
@@ -19,6 +20,7 @@ function TranscriptWord:copy()
     start = self.start,
     end_ = self.end_,
     probability = self.probability,
+    word_start = self.word_start,
   }
 end
 
@@ -27,12 +29,16 @@ function TranscriptWord:score()
 end
 
 function TranscriptWord:to_table()
-  return {
+  local t = {
     word = self.word,
     start = self.start,
     ['end'] = self.end_,
     probability = self.probability,
   }
+  if not self.word_start then
+    t.word_start = false
+  end
+  return t
 end
 
 function TranscriptWord.from_table(data)
@@ -41,6 +47,7 @@ function TranscriptWord.from_table(data)
     start = data.start,
     end_ = data['end'],
     probability = data.probability,
+    word_start = data.word_start,
   }
 end
 
