@@ -515,11 +515,15 @@ function TranscriptUI:init_editor_segments()
     table.insert(self.editor_segments, {
       text = seg:get('text', ''),
       deleted = false,
+      editing = false,
+      text_modified = false,
       segment = seg,
     })
   end
   self._editor_initialized = true
 end
+
+TranscriptUI.EDITOR_MARGIN = 80
 
 function TranscriptUI:render_editor_tab()
   if #self.editor_segments == 0 then
@@ -527,75 +531,19 @@ function TranscriptUI:render_editor_tab()
     return
   end
 
-  ImGui.TextDisabled(Ctx(), "Edit text, delete or reorder segments, then click Refresh to update the timeline.")
+  ImGui.TextDisabled(Ctx(), "Click text to navigate. Double-click to edit. Click Refresh to update the timeline.")
   ImGui.Separator(Ctx())
 
   local avail_w, avail_h = ImGui.GetContentRegionAvail(Ctx())
   if ImGui.BeginChild(Ctx(), '##editor_scroll', avail_w, avail_h - 5, ImGui.ChildFlags_None()) then
     Trap(function()
-      local n = #self.editor_segments
       for i, editor_seg in ipairs(self.editor_segments) do
         ImGui.PushID(Ctx(), i)
         Trap(function()
-          -- Up button
-          ImGui.BeginDisabled(Ctx(), i == 1)
-          if ImGui.Button(Ctx(), ' ^ ', 0, 0) then
-            self.editor_segments[i], self.editor_segments[i - 1] =
-              self.editor_segments[i - 1], self.editor_segments[i]
-          end
-          ImGui.EndDisabled(Ctx())
-          if ImGui.IsItemHovered(Ctx()) then
-            ImGui.SetTooltip(Ctx(), 'Move up')
-          end
-
-          ImGui.SameLine(Ctx())
-
-          -- Down button
-          ImGui.BeginDisabled(Ctx(), i == n)
-          if ImGui.Button(Ctx(), ' v ', 0, 0) then
-            self.editor_segments[i], self.editor_segments[i + 1] =
-              self.editor_segments[i + 1], self.editor_segments[i]
-          end
-          ImGui.EndDisabled(Ctx())
-          if ImGui.IsItemHovered(Ctx()) then
-            ImGui.SetTooltip(Ctx(), 'Move down')
-          end
-
-          ImGui.SameLine(Ctx())
-
-          -- Delete/restore toggle
-          local del_label = editor_seg.deleted and '[+]' or '[X]'
-          if ImGui.Button(Ctx(), del_label, 0, 0) then
-            editor_seg.deleted = not editor_seg.deleted
-          end
-          if ImGui.IsItemHovered(Ctx()) then
-            ImGui.SetTooltip(Ctx(), editor_seg.deleted and 'Restore segment' or 'Delete segment')
-          end
-
-          ImGui.SameLine(Ctx())
-
-          -- Timestamp button (click to navigate to segment on timeline)
-          local ts = reaper.format_timestr(editor_seg.segment:timeline_start_time(), '')
-          if ImGui.Button(Ctx(), ts, 70, 0) then
-            editor_seg.segment:navigate(nil, self.autoplay)
-          end
-          if ImGui.IsItemHovered(Ctx()) then
-            ImGui.SetTooltip(Ctx(), 'Navigate to segment')
-          end
-
-          ImGui.SameLine(Ctx())
-
-          -- Editable text input (fills remaining width)
-          if editor_seg.deleted then
-            ImGui.BeginDisabled(Ctx())
-          end
-          ImGui.SetNextItemWidth(Ctx(), -1)
-          local changed, new_text = ImGui.InputText(Ctx(), '##text', editor_seg.text)
-          if changed then
-            editor_seg.text = new_text
-          end
-          if editor_seg.deleted then
-            ImGui.EndDisabled(Ctx())
+          if editor_seg.editing then
+            self:render_editor_segment_editing(editor_seg)
+          else
+            self:render_editor_segment_document(editor_seg)
           end
         end)
         ImGui.PopID(Ctx())
@@ -603,6 +551,133 @@ function TranscriptUI:render_editor_tab()
     end)
   end
   ImGui.EndChild(Ctx())
+end
+
+function TranscriptUI:render_editor_segment_document(editor_seg)
+  local segment = editor_seg.segment
+  local margin = self.EDITOR_MARGIN
+
+  -- Timestamp link on the left margin
+  local ts = reaper.format_timestr(segment:timeline_start_time(), '')
+  Widgets.link(ts, function() segment:navigate(nil, self.autoplay) end, 0xffffffa0)
+  if ImGui.IsItemHovered(Ctx()) then
+    ImGui.SetTooltip(Ctx(), 'Navigate to segment')
+  end
+
+  ImGui.SameLine(Ctx(), margin)
+
+  -- Render flowing text with clickable words
+  if editor_seg.deleted then
+    ImGui.BeginDisabled(Ctx())
+  end
+
+  if segment.words and not editor_seg.text_modified then
+    self:render_editor_wrapped_words(editor_seg, margin)
+  else
+    -- Fallback: render whole text as a clickable block
+    local avail_w = ImGui.GetContentRegionAvail(Ctx())
+    ImGui.PushTextWrapPos(Ctx(), ImGui.GetCursorPosX(Ctx()) + avail_w)
+    Trap(function()
+      Widgets.link(editor_seg.text, function() segment:navigate(nil, self.autoplay) end)
+    end)
+    ImGui.PopTextWrapPos(Ctx())
+  end
+
+  if editor_seg.deleted then
+    ImGui.EndDisabled(Ctx())
+  end
+
+  -- Detect double-click on the segment area for editing
+  -- Use an invisible button over the last item to detect double-click
+  if not editor_seg.deleted and ImGui.IsItemHovered(Ctx()) and ImGui.IsMouseDoubleClicked(Ctx(), 0) then
+    editor_seg.editing = true
+  end
+
+  -- Segment spacing
+  ImGui.Spacing(Ctx())
+  ImGui.Separator(Ctx())
+  ImGui.Spacing(Ctx())
+end
+
+function TranscriptUI:render_editor_wrapped_words(editor_seg, margin)
+  local segment = editor_seg.segment
+  local padding_x = ImGui.GetStyleVar(Ctx(), ImGui.StyleVar_WindowPadding())
+  local content_right = ImGui.GetWindowWidth(Ctx()) - padding_x
+
+  for i, word in ipairs(segment.words) do
+    local word_text = word.word
+    local word_w = ImGui.CalcTextSize(Ctx(), word_text)
+    local space_w = ImGui.CalcTextSize(Ctx(), ' ')
+
+    if i > 1 then
+      -- Save the next-line Y before trying SameLine
+      local next_line_y = ImGui.GetCursorPosY(Ctx())
+
+      ImGui.SameLine(Ctx(), 0, 0)
+      local cx = ImGui.GetCursorPosX(Ctx())
+
+      if cx + space_w + word_w > content_right then
+        -- Wrap to next line with margin indent
+        ImGui.SetCursorPos(Ctx(), margin, next_line_y)
+      else
+        -- Add space between words
+        ImGui.Text(Ctx(), ' ')
+        ImGui.SameLine(Ctx(), 0, 0)
+      end
+    end
+
+    local color = nil
+    if self.colorize_words then
+      color = self.score_color(word:score())
+    end
+    Widgets.link(word_text, function() segment:navigate(i, self.autoplay) end, color)
+  end
+end
+
+function TranscriptUI:render_editor_segment_editing(editor_seg)
+  local segment = editor_seg.segment
+  local margin = self.EDITOR_MARGIN
+
+  -- Timestamp on left
+  local ts = reaper.format_timestr(segment:timeline_start_time(), '')
+  ImGui.TextDisabled(Ctx(), ts)
+  ImGui.SameLine(Ctx(), margin)
+
+  -- Multiline text input
+  local avail_w = ImGui.GetContentRegionAvail(Ctx())
+  local line_count = 1
+  for _ in editor_seg.text:gmatch('\n') do
+    line_count = line_count + 1
+  end
+  -- Estimate height: at least 3 lines, scale with content
+  local char_width = ImGui.CalcTextSize(Ctx(), 'M')
+  local chars_per_line = math.max(1, math.floor(avail_w / char_width))
+  local wrapped_lines = math.ceil(#editor_seg.text / chars_per_line)
+  local text_height = ImGui.GetTextLineHeightWithSpacing(Ctx())
+    * math.max(3, math.max(line_count, wrapped_lines) + 1)
+
+  ImGui.SetNextItemWidth(Ctx(), avail_w)
+  local changed, new_text = ImGui.InputTextMultiline(
+    Ctx(), '##edit_text', editor_seg.text, avail_w, text_height)
+  if changed then
+    editor_seg.text = new_text
+    editor_seg.text_modified = true
+  end
+
+  -- Exit edit mode: Escape key or click outside
+  if ImGui.IsKeyPressed(Ctx(), ImGui.Key_Escape()) then
+    editor_seg.editing = false
+  end
+
+  -- If the input lost focus (clicked elsewhere), exit edit mode
+  if not ImGui.IsItemActive(Ctx()) and not ImGui.IsItemHovered(Ctx()) and
+     ImGui.IsMouseClicked(Ctx(), 0) then
+    editor_seg.editing = false
+  end
+
+  ImGui.Spacing(Ctx())
+  ImGui.Separator(Ctx())
+  ImGui.Spacing(Ctx())
 end
 
 function TranscriptUI:apply_editor_to_timeline()
