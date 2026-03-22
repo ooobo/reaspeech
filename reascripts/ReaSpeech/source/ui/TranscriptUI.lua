@@ -651,7 +651,7 @@ function TranscriptUI:render_editor_document()
         ImGui.Spacing(Ctx())
         ImGui.Spacing(Ctx())
       end
-      local ts = reaper.format_timestr(fw.segment:timeline_start_time(), '')
+      local ts = TranscriptUI.format_timestr(fw.segment:timeline_start_time())
       ImGui.TextDisabled(Ctx(), ts)
       ImGui.SameLine(Ctx(), margin)
       prev_seg_idx = fw.seg_idx
@@ -1068,6 +1068,10 @@ function TranscriptUI:render_segment_actions(segment, index)
   end
 end
 
+function TranscriptUI.format_timestr(time)
+  return reaper.format_timestr(time, ''):gsub('(%.[%d][%d])[%d]+', '%1')
+end
+
 function TranscriptUI:render_table_cell(segment, column)
   if column == "text" or column == "word" then
     self:render_text(segment, column)
@@ -1077,7 +1081,7 @@ function TranscriptUI:render_table_cell(segment, column)
     -- Time columns: get() returns timeline times for start/end, raw times for raw-start/raw-end
     local time_value = segment:get(column)
     if time_value then
-      ImGui.Text(Ctx(), reaper.format_timestr(time_value, ''))
+      ImGui.Text(Ctx(), TranscriptUI.format_timestr(time_value))
     else
       ImGui.Text(Ctx(), '-')
     end
@@ -1094,8 +1098,8 @@ function TranscriptUI:render_table_cell(segment, column)
     -- Show tooltip on hover
     if ImGui.IsItemHovered(Ctx()) then
       ImGui.SetTooltip(Ctx(), string.format("Insert %s-%s",
-        reaper.format_timestr(raw_start, ''),
-        reaper.format_timestr(raw_end, '')))
+        TranscriptUI.format_timestr(raw_start),
+        TranscriptUI.format_timestr(raw_end)))
     end
   else
     local value = segment:get(column)
