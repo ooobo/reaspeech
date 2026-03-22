@@ -1069,7 +1069,7 @@ function TranscriptUI:render_segment_actions(segment, index)
 end
 
 function TranscriptUI.format_timestr(time)
-  return reaper.format_timestr(time, ''):gsub('(%.[%d][%d])[%d]+', '%1')
+  return (reaper.format_timestr(time, ''):gsub('(%.[%d][%d])[%d]+', '%1'))
 end
 
 function TranscriptUI:render_table_cell(segment, column)
