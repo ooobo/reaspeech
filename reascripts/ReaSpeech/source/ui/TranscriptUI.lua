@@ -590,6 +590,11 @@ function TranscriptUI:render_editor_tab()
   ImGui.EndChild(Ctx())
 end
 
+-- Get trimmed display text for a word (parakeet words have leading spaces)
+function TranscriptUI.word_display_text(fw)
+  return fw.word.word:match('^%s*(.-)%s*$')
+end
+
 function TranscriptUI:render_editor_document()
   local margin = self.EDITOR_MARGIN
   local padding_x = ImGui.GetStyleVar(Ctx(), ImGui.StyleVar_WindowPadding())
@@ -600,6 +605,8 @@ function TranscriptUI:render_editor_document()
   local caret_x, caret_y1, caret_y2
 
   for i, fw in ipairs(self._flat_words) do
+    local display = self.word_display_text(fw)
+
     -- Paragraph break at segment boundary
     if fw.seg_idx ~= prev_seg_idx then
       if prev_seg_idx then
@@ -608,15 +615,12 @@ function TranscriptUI:render_editor_document()
       end
       -- Timestamp in left margin
       local ts = reaper.format_timestr(fw.segment:timeline_start_time(), '')
-      Widgets.link(ts, function() fw.segment:navigate(nil, self.autoplay) end, 0xffffffa0)
-      if ImGui.IsItemHovered(Ctx()) then
-        ImGui.SetTooltip(Ctx(), 'Navigate to segment')
-      end
+      ImGui.TextDisabled(Ctx(), ts)
       ImGui.SameLine(Ctx(), margin)
       prev_seg_idx = fw.seg_idx
     else
       -- Word wrapping within segment
-      local word_w = ImGui.CalcTextSize(Ctx(), fw.word.word)
+      local word_w = ImGui.CalcTextSize(Ctx(), display)
       local space_w = ImGui.CalcTextSize(Ctx(), ' ')
       local next_line_y = ImGui.GetCursorPosY(Ctx())
 
@@ -634,7 +638,7 @@ function TranscriptUI:render_editor_document()
     -- Render word text
     local is_selected = sel_min and i >= sel_min and i <= sel_max
     if fw.deleted then
-      ImGui.TextColored(Ctx(), self.EDITOR_DELETED_COLOR, fw.word.word)
+      ImGui.TextColored(Ctx(), self.EDITOR_DELETED_COLOR, display)
       -- Strikethrough line
       local rx, ry = ImGui.GetItemRectMin(Ctx())
       local rx2 = select(1, ImGui.GetItemRectMax(Ctx()))
@@ -646,7 +650,7 @@ function TranscriptUI:render_editor_document()
       if self.colorize_words then
         color = self.score_color(fw.word:score()) or color
       end
-      ImGui.TextColored(Ctx(), color, fw.word.word)
+      ImGui.TextColored(Ctx(), color, display)
     end
 
     -- Selection highlight
@@ -659,13 +663,11 @@ function TranscriptUI:render_editor_document()
 
     -- Track caret position
     if self._cursor == i - 1 then
-      -- Caret before this word (at its left edge)
       local rx, ry = ImGui.GetItemRectMin(Ctx())
       local ry2 = select(2, ImGui.GetItemRectMax(Ctx()))
       caret_x, caret_y1, caret_y2 = rx - 1, ry, ry2
     end
     if self._cursor == i then
-      -- Caret after this word (at its right edge) — used for last position
       local rx2, ry2 = ImGui.GetItemRectMax(Ctx())
       local ry = select(2, ImGui.GetItemRectMin(Ctx()))
       caret_x, caret_y1, caret_y2 = rx2 + 1, ry, ry2
@@ -680,8 +682,7 @@ function TranscriptUI:render_editor_document()
       end
 
       if ImGui.IsMouseClicked(Ctx(), 0) then
-        -- Place cursor at left or right edge based on click position
-        local new_cursor = i  -- default: after word
+        local new_cursor = i
         if ImGui.GetMousePos then
           local rx = select(1, ImGui.GetItemRectMin(Ctx()))
           local rx2 = select(1, ImGui.GetItemRectMax(Ctx()))
@@ -700,11 +701,14 @@ function TranscriptUI:render_editor_document()
           end
         else
           self._sel_anchor = nil
-          -- Navigate to clicked word
-          fw.segment:navigate(fw.word_idx, self.autoplay)
         end
         self._cursor = new_cursor
         self._cursor_changed_time = reaper.time_precise()
+
+        -- Navigate/play only when autoplay is on and not extending selection
+        if not shift_held and self.autoplay then
+          fw.segment:navigate(fw.word_idx, true)
+        end
       end
     end
   end
