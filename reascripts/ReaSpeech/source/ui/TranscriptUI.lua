@@ -99,6 +99,10 @@ function TranscriptUI:init()
 
   self._active_inner_tab = 'table'
   self.editor_segments = {}
+  self._flat_words = {}
+  self._cursor = 0
+  self._sel_anchor = nil
+  self._cursor_changed_time = 0
   self._editor_initialized = false
 
   self:init_layouts()
@@ -509,188 +513,277 @@ function TranscriptUI:handle_refresh()
   end
 end
 
+TranscriptUI.EDITOR_MARGIN = 80
+TranscriptUI.EDITOR_CARET_COLOR = 0xffffffff
+TranscriptUI.EDITOR_SELECTION_COLOR = 0x4488ff66
+TranscriptUI.EDITOR_DELETED_COLOR = 0x888888ff
+TranscriptUI.EDITOR_CARET_BLINK_RATE = 0.53
+
 function TranscriptUI:init_editor_segments()
   self.editor_segments = {}
-  for _, seg in ipairs(self.transcript:get_segments()) do
+  self._flat_words = {}
+  self._cursor = 0
+  self._sel_anchor = nil
+  self._cursor_changed_time = 0
+
+  for seg_idx, seg in ipairs(self.transcript:get_segments()) do
     table.insert(self.editor_segments, {
-      text = seg:get('text', ''),
-      deleted = false,
-      editing = false,
-      text_modified = false,
       segment = seg,
+      seg_idx = seg_idx,
     })
+
+    if seg.words then
+      for word_idx, word in ipairs(seg.words) do
+        table.insert(self._flat_words, {
+          word = word,
+          seg_idx = seg_idx,
+          word_idx = word_idx,
+          segment = seg,
+          deleted = false,
+        })
+      end
+    end
   end
   self._editor_initialized = true
 end
 
-TranscriptUI.EDITOR_MARGIN = 80
-
 function TranscriptUI:render_editor_tab()
-  if #self.editor_segments == 0 then
-    ImGui.TextDisabled(Ctx(), "No segments. Transcribe audio first, then switch to this tab.")
+  if #self._flat_words == 0 then
+    ImGui.TextDisabled(Ctx(), "No word data. Transcribe audio first, then switch to this tab.")
     return
   end
 
-  ImGui.TextDisabled(Ctx(), "Click text to navigate. Double-click to edit. Click Refresh to update the timeline.")
+  ImGui.TextDisabled(Ctx(), "Click to place cursor. Shift-click to select. Delete to cut. Refresh to apply.")
   ImGui.Separator(Ctx())
 
   local avail_w, avail_h = ImGui.GetContentRegionAvail(Ctx())
   if ImGui.BeginChild(Ctx(), '##editor_scroll', avail_w, avail_h - 5, ImGui.ChildFlags_None()) then
     Trap(function()
-      for i, editor_seg in ipairs(self.editor_segments) do
-        ImGui.PushID(Ctx(), i)
-        Trap(function()
-          if editor_seg.editing then
-            self:render_editor_segment_editing(editor_seg)
-          else
-            self:render_editor_segment_document(editor_seg)
-          end
-        end)
-        ImGui.PopID(Ctx())
-      end
+      self:render_editor_document()
+      self:handle_editor_keys()
     end)
   end
   ImGui.EndChild(Ctx())
 end
 
-function TranscriptUI:render_editor_segment_document(editor_seg)
-  local segment = editor_seg.segment
+function TranscriptUI:render_editor_document()
   local margin = self.EDITOR_MARGIN
-
-  -- Timestamp link on the left margin
-  local ts = reaper.format_timestr(segment:timeline_start_time(), '')
-  Widgets.link(ts, function() segment:navigate(nil, self.autoplay) end, 0xffffffa0)
-  if ImGui.IsItemHovered(Ctx()) then
-    ImGui.SetTooltip(Ctx(), 'Navigate to segment')
-  end
-
-  ImGui.SameLine(Ctx(), margin)
-
-  -- Render flowing text with clickable words
-  if editor_seg.deleted then
-    ImGui.BeginDisabled(Ctx())
-  end
-
-  if segment.words and not editor_seg.text_modified then
-    self:render_editor_wrapped_words(editor_seg, margin)
-  else
-    -- Fallback: render whole text as a clickable block
-    local avail_w = ImGui.GetContentRegionAvail(Ctx())
-    ImGui.PushTextWrapPos(Ctx(), ImGui.GetCursorPosX(Ctx()) + avail_w)
-    Trap(function()
-      Widgets.link(editor_seg.text, function() segment:navigate(nil, self.autoplay) end)
-    end)
-    ImGui.PopTextWrapPos(Ctx())
-  end
-
-  if editor_seg.deleted then
-    ImGui.EndDisabled(Ctx())
-  end
-
-  -- Detect double-click on the segment area for editing
-  -- Use an invisible button over the last item to detect double-click
-  if not editor_seg.deleted and ImGui.IsItemHovered(Ctx()) and ImGui.IsMouseDoubleClicked(Ctx(), 0) then
-    editor_seg.editing = true
-  end
-
-  -- Segment spacing
-  ImGui.Spacing(Ctx())
-  ImGui.Separator(Ctx())
-  ImGui.Spacing(Ctx())
-end
-
-function TranscriptUI:render_editor_wrapped_words(editor_seg, margin)
-  local segment = editor_seg.segment
   local padding_x = ImGui.GetStyleVar(Ctx(), ImGui.StyleVar_WindowPadding())
   local content_right = ImGui.GetWindowWidth(Ctx()) - padding_x
+  local draw_list = ImGui.GetWindowDrawList(Ctx())
+  local sel_min, sel_max = self:editor_selection_range()
+  local prev_seg_idx = nil
+  local caret_x, caret_y1, caret_y2
 
-  for i, word in ipairs(segment.words) do
-    local word_text = word.word
-    local word_w = ImGui.CalcTextSize(Ctx(), word_text)
-    local space_w = ImGui.CalcTextSize(Ctx(), ' ')
-
-    if i > 1 then
-      -- Save the next-line Y before trying SameLine
+  for i, fw in ipairs(self._flat_words) do
+    -- Paragraph break at segment boundary
+    if fw.seg_idx ~= prev_seg_idx then
+      if prev_seg_idx then
+        ImGui.Spacing(Ctx())
+        ImGui.Spacing(Ctx())
+      end
+      -- Timestamp in left margin
+      local ts = reaper.format_timestr(fw.segment:timeline_start_time(), '')
+      Widgets.link(ts, function() fw.segment:navigate(nil, self.autoplay) end, 0xffffffa0)
+      if ImGui.IsItemHovered(Ctx()) then
+        ImGui.SetTooltip(Ctx(), 'Navigate to segment')
+      end
+      ImGui.SameLine(Ctx(), margin)
+      prev_seg_idx = fw.seg_idx
+    else
+      -- Word wrapping within segment
+      local word_w = ImGui.CalcTextSize(Ctx(), fw.word.word)
+      local space_w = ImGui.CalcTextSize(Ctx(), ' ')
       local next_line_y = ImGui.GetCursorPosY(Ctx())
 
       ImGui.SameLine(Ctx(), 0, 0)
       local cx = ImGui.GetCursorPosX(Ctx())
 
       if cx + space_w + word_w > content_right then
-        -- Wrap to next line with margin indent
         ImGui.SetCursorPos(Ctx(), margin, next_line_y)
       else
-        -- Add space between words
         ImGui.Text(Ctx(), ' ')
         ImGui.SameLine(Ctx(), 0, 0)
       end
     end
 
-    local color = nil
-    if self.colorize_words then
-      color = self.score_color(word:score())
+    -- Render word text
+    local is_selected = sel_min and i >= sel_min and i <= sel_max
+    if fw.deleted then
+      ImGui.TextColored(Ctx(), self.EDITOR_DELETED_COLOR, fw.word.word)
+      -- Strikethrough line
+      local rx, ry = ImGui.GetItemRectMin(Ctx())
+      local rx2 = select(1, ImGui.GetItemRectMax(Ctx()))
+      local rh = select(2, ImGui.GetItemRectSize(Ctx()))
+      ImGui.DrawList_AddLine(draw_list, rx, ry + rh / 2, rx2, ry + rh / 2,
+        self.EDITOR_DELETED_COLOR, 1.0)
+    else
+      local color = 0xffffffff
+      if self.colorize_words then
+        color = self.score_color(fw.word:score()) or color
+      end
+      ImGui.TextColored(Ctx(), color, fw.word.word)
     end
-    Widgets.link(word_text, function() segment:navigate(i, self.autoplay) end, color)
+
+    -- Selection highlight
+    if is_selected then
+      local rx, ry = ImGui.GetItemRectMin(Ctx())
+      local rx2, ry2 = ImGui.GetItemRectMax(Ctx())
+      ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2,
+        self.EDITOR_SELECTION_COLOR)
+    end
+
+    -- Track caret position
+    if self._cursor == i - 1 then
+      -- Caret before this word (at its left edge)
+      local rx, ry = ImGui.GetItemRectMin(Ctx())
+      local ry2 = select(2, ImGui.GetItemRectMax(Ctx()))
+      caret_x, caret_y1, caret_y2 = rx - 1, ry, ry2
+    end
+    if self._cursor == i then
+      -- Caret after this word (at its right edge) — used for last position
+      local rx2, ry2 = ImGui.GetItemRectMax(Ctx())
+      local ry = select(2, ImGui.GetItemRectMin(Ctx()))
+      caret_x, caret_y1, caret_y2 = rx2 + 1, ry, ry2
+    end
+
+    -- Handle clicks on this word
+    if ImGui.IsItemHovered(Ctx()) then
+      ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_TextInput())
+
+      if ImGui.IsMouseClicked(Ctx(), 0) then
+        -- Place cursor at left or right edge based on click position
+        local rx = select(1, ImGui.GetItemRectMin(Ctx()))
+        local rx2 = select(1, ImGui.GetItemRectMax(Ctx()))
+        local mx = select(1, ImGui.GetMousePos(Ctx()))
+        local mid = (rx + rx2) / 2
+        local new_cursor = (mx < mid) and (i - 1) or i
+
+        if ImGui.IsKeyDown(Ctx(), ImGui.Mod_Shift()) then
+          if not self._sel_anchor then
+            self._sel_anchor = self._cursor
+          end
+        else
+          self._sel_anchor = nil
+          -- Navigate to clicked word
+          fw.segment:navigate(fw.word_idx, self.autoplay)
+        end
+        self._cursor = new_cursor
+        self._cursor_changed_time = reaper.time_precise()
+      end
+    end
+  end
+
+  -- Draw blinking caret
+  if caret_x then
+    local elapsed = reaper.time_precise() - self._cursor_changed_time
+    local blink = math.floor(elapsed / self.EDITOR_CARET_BLINK_RATE) % 2
+    if blink == 0 then
+      ImGui.DrawList_AddLine(draw_list, caret_x, caret_y1, caret_x, caret_y2,
+        self.EDITOR_CARET_COLOR, 2.0)
+    end
   end
 end
 
-function TranscriptUI:render_editor_segment_editing(editor_seg)
-  local segment = editor_seg.segment
-  local margin = self.EDITOR_MARGIN
-
-  -- Timestamp on left
-  local ts = reaper.format_timestr(segment:timeline_start_time(), '')
-  ImGui.TextDisabled(Ctx(), ts)
-  ImGui.SameLine(Ctx(), margin)
-
-  -- Multiline text input
-  local avail_w = ImGui.GetContentRegionAvail(Ctx())
-  local line_count = 1
-  for _ in editor_seg.text:gmatch('\n') do
-    line_count = line_count + 1
+function TranscriptUI:editor_selection_range()
+  if not self._sel_anchor then
+    return nil, nil
   end
-  -- Estimate height: at least 3 lines, scale with content
-  local char_width = ImGui.CalcTextSize(Ctx(), 'M')
-  local chars_per_line = math.max(1, math.floor(avail_w / char_width))
-  local wrapped_lines = math.ceil(#editor_seg.text / chars_per_line)
-  local text_height = ImGui.GetTextLineHeightWithSpacing(Ctx())
-    * math.max(3, math.max(line_count, wrapped_lines) + 1)
-
-  ImGui.SetNextItemWidth(Ctx(), avail_w)
-  local changed, new_text = ImGui.InputTextMultiline(
-    Ctx(), '##edit_text', editor_seg.text, avail_w, text_height)
-  if changed then
-    editor_seg.text = new_text
-    editor_seg.text_modified = true
+  local a = self._sel_anchor
+  local b = self._cursor
+  -- Selection covers words between the two gap positions
+  local gap_min = math.min(a, b)
+  local gap_max = math.max(a, b)
+  if gap_min == gap_max then
+    return nil, nil
   end
+  -- Words from gap_min+1 to gap_max are selected (1-based)
+  return gap_min + 1, gap_max
+end
 
-  -- Exit edit mode: Escape key or click outside
-  if ImGui.IsKeyPressed(Ctx(), ImGui.Key_Escape()) then
-    editor_seg.editing = false
-  end
+function TranscriptUI:handle_editor_keys()
+  if #self._flat_words == 0 then return end
 
-  -- If the input lost focus (clicked elsewhere), exit edit mode
-  if not ImGui.IsItemActive(Ctx()) and not ImGui.IsItemHovered(Ctx()) and
-     ImGui.IsMouseClicked(Ctx(), 0) then
-    editor_seg.editing = false
+  -- Delete / Backspace: mark selected words as deleted
+  local del = ImGui.IsKeyPressed(Ctx(), ImGui.Key_Delete())
+  local bs = ImGui.IsKeyPressed(Ctx(), ImGui.Key_Backspace())
+  if del or bs then
+    local sel_min, sel_max = self:editor_selection_range()
+    if sel_min then
+      for i = sel_min, sel_max do
+        self._flat_words[i].deleted = not self._flat_words[i].deleted
+      end
+      -- Move cursor to start of selection
+      self._cursor = sel_min - 1
+      self._sel_anchor = nil
+      self._cursor_changed_time = reaper.time_precise()
+    end
   end
 
-  ImGui.Spacing(Ctx())
-  ImGui.Separator(Ctx())
-  ImGui.Spacing(Ctx())
+  -- Left arrow
+  if ImGui.IsKeyPressed(Ctx(), ImGui.Key_LeftArrow()) then
+    if ImGui.IsKeyDown(Ctx(), ImGui.Mod_Shift()) then
+      if not self._sel_anchor then
+        self._sel_anchor = self._cursor
+      end
+    else
+      self._sel_anchor = nil
+    end
+    if self._cursor > 0 then
+      self._cursor = self._cursor - 1
+      self._cursor_changed_time = reaper.time_precise()
+    end
+  end
+
+  -- Right arrow
+  if ImGui.IsKeyPressed(Ctx(), ImGui.Key_RightArrow()) then
+    if ImGui.IsKeyDown(Ctx(), ImGui.Mod_Shift()) then
+      if not self._sel_anchor then
+        self._sel_anchor = self._cursor
+      end
+    else
+      self._sel_anchor = nil
+    end
+    if self._cursor < #self._flat_words then
+      self._cursor = self._cursor + 1
+      self._cursor_changed_time = reaper.time_precise()
+    end
+  end
+
+  -- Ctrl+A: select all
+  if ImGui.IsKeyDown(Ctx(), ImGui.Mod_Ctrl()) and
+     ImGui.IsKeyPressed(Ctx(), ImGui.Key_A()) then
+    self._sel_anchor = 0
+    self._cursor = #self._flat_words
+  end
 end
 
 function TranscriptUI:apply_editor_to_timeline()
-  -- Collect retained segments in current (possibly reordered) order
-  local retained = {}
-  for _, editor_seg in ipairs(self.editor_segments) do
-    if not editor_seg.deleted then
-      table.insert(retained, editor_seg)
+  -- Group consecutive non-deleted words into ranges
+  local groups = {}
+  local current = nil
+
+  for _, fw in ipairs(self._flat_words) do
+    if not fw.deleted then
+      if current and current.segment == fw.segment then
+        -- Extend current group
+        current.end_time = fw.word.end_
+      else
+        -- Start new group
+        current = {
+          segment = fw.segment,
+          start_time = fw.word.start,
+          end_time = fw.word.end_,
+        }
+        table.insert(groups, current)
+      end
+    else
+      current = nil
     end
   end
 
-  if #retained == 0 then
-    reaper.ShowConsoleMsg("ReaSpeech: No segments retained — nothing to place on timeline.\n")
+  if #groups == 0 then
+    reaper.ShowConsoleMsg("ReaSpeech: No words retained — nothing to place on timeline.\n")
     return
   end
 
@@ -702,23 +795,16 @@ function TranscriptUI:apply_editor_to_timeline()
   local new_track = reaper.GetTrack(0, track_idx)
   reaper.GetSetMediaTrackInfo_String(new_track, 'P_NAME', 'ReaSpeech Recut', true)
 
-  -- Place each retained segment sequentially with no gaps
+  -- Place each word group sequentially with no gaps
   local cursor = 0.0
-  for _, editor_seg in ipairs(retained) do
-    local seg = editor_seg.segment
-
-    -- Apply text edits back to segment data
-    seg.data.text = editor_seg.text
-
-    local file_path = seg:get_source_path()
+  for _, group in ipairs(groups) do
+    local file_path = group.segment:get_source_path()
     if not file_path or file_path == '' then
-      file_path = seg.data._source_path
+      file_path = group.segment.data._source_path
     end
 
     if file_path and file_path ~= '' and reaper.file_exists(file_path) then
-      local raw_start = seg:get('raw-start', 0)
-      local raw_end   = seg:get('raw-end', 0)
-      local length    = raw_end - raw_start
+      local length = group.end_time - group.start_time
 
       if length > 0 then
         local item = reaper.AddMediaItemToTrack(new_track)
@@ -727,7 +813,7 @@ function TranscriptUI:apply_editor_to_timeline()
         local take = reaper.AddTakeToMediaItem(item)
         local pcm_source = reaper.PCM_Source_CreateFromFile(file_path)
         reaper.SetMediaItemTake_Source(take, pcm_source)
-        reaper.SetMediaItemTakeInfo_Value(take, 'D_STARTOFFS', raw_start)
+        reaper.SetMediaItemTakeInfo_Value(take, 'D_STARTOFFS', group.start_time)
         cursor = cursor + length
       end
     end
