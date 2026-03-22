@@ -532,7 +532,7 @@ function TranscriptUI:init_editor_segments()
       seg_idx = seg_idx,
     })
 
-    if seg.words then
+    if seg.words and #seg.words > 0 then
       for word_idx, word in ipairs(seg.words) do
         table.insert(self._flat_words, {
           word = word,
@@ -542,6 +542,30 @@ function TranscriptUI:init_editor_segments()
           deleted = false,
         })
       end
+    else
+      -- No word-level data: split segment text into synthetic word entries
+      local text = seg:get('text', '')
+      local raw_start = seg:get('raw-start', 0)
+      local raw_end = seg:get('raw-end', 0)
+      local tokens = {}
+      for token in text:gmatch('%S+') do
+        table.insert(tokens, token)
+      end
+      if #tokens > 0 then
+        local duration = raw_end - raw_start
+        local token_dur = duration / #tokens
+        for ti, token in ipairs(tokens) do
+          local t_start = raw_start + (ti - 1) * token_dur
+          local t_end = raw_start + ti * token_dur
+          table.insert(self._flat_words, {
+            word = { word = token, start = t_start, end_ = t_end, score = function() return 1.0 end },
+            seg_idx = seg_idx,
+            word_idx = ti,
+            segment = seg,
+            deleted = false,
+          })
+        end
+      end
     end
   end
   self._editor_initialized = true
@@ -549,7 +573,7 @@ end
 
 function TranscriptUI:render_editor_tab()
   if #self._flat_words == 0 then
-    ImGui.TextDisabled(Ctx(), "No word data. Transcribe audio first, then switch to this tab.")
+    ImGui.TextDisabled(Ctx(), "No segments. Transcribe audio first, then switch to this tab.")
     return
   end
 
