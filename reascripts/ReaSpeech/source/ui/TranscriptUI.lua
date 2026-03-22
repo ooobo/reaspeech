@@ -657,16 +657,17 @@ function TranscriptUI:render_editor_document()
       prev_seg_idx = fw.seg_idx
     else
       -- Word wrapping within segment
-      local word_w = ImGui.CalcTextSize(Ctx(), display)
-      local space_w = ImGui.CalcTextSize(Ctx(), ' ')
-      local next_line_y = ImGui.GetCursorPosY(Ctx())
-
       ImGui.SameLine(Ctx(), 0, 0)
       local cx = ImGui.GetCursorPosX(Ctx())
+      local cy = ImGui.GetCursorPosY(Ctx())
+      local line_h = ImGui.GetTextLineHeightWithSpacing(Ctx())
+      local word_w = ImGui.CalcTextSize(Ctx(), display)
+      local is_word_start = fw.word.word_start ~= false
+      local gap_w = is_word_start and ImGui.CalcTextSize(Ctx(), ' ') or 0
 
-      if cx + space_w + word_w > content_right then
-        ImGui.SetCursorPos(Ctx(), margin, next_line_y)
-      else
+      if cx + gap_w + word_w > content_right then
+        ImGui.SetCursorPos(Ctx(), margin, cy + line_h)
+      elseif is_word_start then
         ImGui.Text(Ctx(), ' ')
         ImGui.SameLine(Ctx(), 0, 0)
       end
