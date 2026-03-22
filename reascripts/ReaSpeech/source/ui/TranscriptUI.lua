@@ -518,6 +518,9 @@ TranscriptUI.EDITOR_CARET_COLOR = 0xffffffff
 TranscriptUI.EDITOR_SELECTION_COLOR = 0x4488ff66
 TranscriptUI.EDITOR_DELETED_COLOR = 0x888888ff
 TranscriptUI.EDITOR_CARET_BLINK_RATE = 0.53
+TranscriptUI.EDITOR_PLAYING_COLOR = 0x00ccff99  -- cyan, playing word
+TranscriptUI.EDITOR_HOVER_COLOR   = 0xffffff1a  -- white 10%, hover
+TranscriptUI.EDITOR_SEARCH_COLOR  = 0xffcc0066  -- amber, search match
 
 function TranscriptUI:init_editor_segments()
   self.editor_segments = {}
@@ -525,6 +528,8 @@ function TranscriptUI:init_editor_segments()
   self._cursor = 0
   self._sel_anchor = nil
   self._cursor_changed_time = 0
+  self._drag_anchor = nil
+  self._playing_word_idx = nil
 
   for seg_idx, seg in ipairs(self.transcript:get_segments()) do
     table.insert(self.editor_segments, {
@@ -577,7 +582,7 @@ function TranscriptUI:render_editor_tab()
     return
   end
 
-  ImGui.TextDisabled(Ctx(), "Click to place cursor. Shift-click to select. Delete to cut. Refresh to apply.")
+  ImGui.TextDisabled(Ctx(), "Click or drag to select. Double-click selects word. Delete to cut. Refresh to apply.")
   ImGui.Separator(Ctx())
 
   local avail_w, avail_h = ImGui.GetContentRegionAvail(Ctx())
@@ -604,6 +609,39 @@ function TranscriptUI:render_editor_document()
   local prev_seg_idx = nil
   local caret_x, caret_y1, caret_y2
 
+  -- Playing word detection
+  local play_state = reaper.GetPlayState()
+  local play_pos = nil
+  if play_state & 1 == 1 or play_state & 2 == 2 then
+    play_pos = reaper.GetPlayPosition()
+  end
+  local seg_tl_cache = {}
+  local function word_is_playing(fw)
+    if not play_pos then return false end
+    local tl = seg_tl_cache[fw.seg_idx]
+    if tl == nil then
+      tl = fw.segment:is_on_timeline() and fw.segment:timeline_start_time() or false
+      seg_tl_cache[fw.seg_idx] = tl
+    end
+    if not tl then return false end
+    local wt_start = tl + (fw.word.start - fw.segment.start)
+    local wt_end   = tl + (fw.word.end_  - fw.segment.start)
+    return play_pos >= wt_start and play_pos < wt_end
+  end
+
+  -- Search match detection
+  local search_pat = nil
+  do
+    local s = self.transcript and self.transcript.search or ''
+    if s ~= '' then search_pat = s:lower() end
+  end
+  local function word_matches_search(display)
+    return search_pat and display:lower():find(search_pat, 1, true)
+  end
+
+  -- Mouse state for drag selection
+  local mouse_down = ImGui.IsMouseDown and ImGui.IsMouseDown(Ctx(), 0) or false
+
   for i, fw in ipairs(self._flat_words) do
     local display = self.word_display_text(fw)
 
@@ -613,7 +651,6 @@ function TranscriptUI:render_editor_document()
         ImGui.Spacing(Ctx())
         ImGui.Spacing(Ctx())
       end
-      -- Timestamp in left margin
       local ts = reaper.format_timestr(fw.segment:timeline_start_time(), '')
       ImGui.TextDisabled(Ctx(), ts)
       ImGui.SameLine(Ctx(), margin)
@@ -636,10 +673,8 @@ function TranscriptUI:render_editor_document()
     end
 
     -- Render word text
-    local is_selected = sel_min and i >= sel_min and i <= sel_max
     if fw.deleted then
       ImGui.TextColored(Ctx(), self.EDITOR_DELETED_COLOR, display)
-      -- Strikethrough line
       local rx, ry = ImGui.GetItemRectMin(Ctx())
       local rx2 = select(1, ImGui.GetItemRectMax(Ctx()))
       local rh = select(2, ImGui.GetItemRectSize(Ctx()))
@@ -653,65 +688,84 @@ function TranscriptUI:render_editor_document()
       ImGui.TextColored(Ctx(), color, display)
     end
 
-    -- Selection highlight
-    if is_selected then
-      local rx, ry = ImGui.GetItemRectMin(Ctx())
-      local rx2, ry2 = ImGui.GetItemRectMax(Ctx())
-      ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2,
-        self.EDITOR_SELECTION_COLOR)
+    -- Collect item rect once for all overlay/interaction uses
+    local rx, ry   = ImGui.GetItemRectMin(Ctx())
+    local rx2, ry2 = ImGui.GetItemRectMax(Ctx())
+    local is_hovered = ImGui.IsItemHovered(Ctx())
+
+    -- Priority-ordered overlays (drawn on top of text via semi-transparent colors)
+    local is_playing = word_is_playing(fw)
+    local is_search  = not is_playing and word_matches_search(display)
+    local is_sel     = not is_playing and not is_search
+                       and sel_min and i >= sel_min and i <= sel_max
+
+    if is_playing then
+      ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_PLAYING_COLOR)
+    elseif is_search then
+      ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_SEARCH_COLOR)
+    elseif is_sel then
+      ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_SELECTION_COLOR)
+    elseif is_hovered then
+      ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_HOVER_COLOR)
     end
 
-    -- Track caret position
+    -- Auto-scroll to keep playing word visible
+    if is_playing and self._playing_word_idx ~= i then
+      self._playing_word_idx = i
+      ImGui.SetScrollHereY(Ctx(), 0.35)
+    end
+
+    -- Caret tracking
     if self._cursor == i - 1 then
-      local rx, ry = ImGui.GetItemRectMin(Ctx())
-      local ry2 = select(2, ImGui.GetItemRectMax(Ctx()))
       caret_x, caret_y1, caret_y2 = rx - 1, ry, ry2
     end
     if self._cursor == i then
-      local rx2, ry2 = ImGui.GetItemRectMax(Ctx())
-      local ry = select(2, ImGui.GetItemRectMin(Ctx()))
       caret_x, caret_y1, caret_y2 = rx2 + 1, ry, ry2
     end
 
-    -- Handle clicks on this word
-    if ImGui.IsItemHovered(Ctx()) then
-      if ImGui.MouseCursor_TextInput then
-        ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_TextInput())
-      else
-        ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_Hand())
-      end
+    -- Mouse interaction
+    if is_hovered then
+      ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_TextInput and
+        ImGui.MouseCursor_TextInput() or ImGui.MouseCursor_Hand())
 
-      if ImGui.IsMouseClicked(Ctx(), 0) then
-        local new_cursor = i
-        if ImGui.GetMousePos then
-          local rx = select(1, ImGui.GetItemRectMin(Ctx()))
-          local rx2 = select(1, ImGui.GetItemRectMax(Ctx()))
-          local mx = select(1, ImGui.GetMousePos(Ctx()))
-          local mid = (rx + rx2) / 2
-          if mx < mid then
-            new_cursor = i - 1
-          end
-        end
+      local mx = ImGui.GetMousePos and select(1, ImGui.GetMousePos(Ctx())) or (rx + rx2) / 2
+      local new_cursor = (mx < (rx + rx2) / 2) and (i - 1) or i
+      local shift = ImGui.IsKeyDown and ImGui.Mod_Shift
+          and ImGui.IsKeyDown(Ctx(), ImGui.Mod_Shift())
 
-        local shift_held = ImGui.IsKeyDown and ImGui.Mod_Shift
-            and ImGui.IsKeyDown(Ctx(), ImGui.Mod_Shift())
-        if shift_held then
-          if not self._sel_anchor then
-            self._sel_anchor = self._cursor
-          end
+      if ImGui.IsMouseDoubleClicked(Ctx(), 0) then
+        self._sel_anchor  = i - 1
+        self._cursor      = i
+        self._drag_anchor = nil
+        self._cursor_changed_time = reaper.time_precise()
+
+      elseif ImGui.IsMouseClicked(Ctx(), 0) then
+        if shift then
+          if not self._sel_anchor then self._sel_anchor = self._cursor end
         else
-          self._sel_anchor = nil
+          self._sel_anchor  = nil
+          self._drag_anchor = new_cursor
         end
         self._cursor = new_cursor
         self._cursor_changed_time = reaper.time_precise()
-
-        -- Navigate/play only when autoplay is on and not extending selection
-        if not shift_held and self.autoplay then
+        if not shift and self.autoplay then
           fw.segment:navigate(fw.word_idx, true)
         end
+
+      elseif mouse_down and self._drag_anchor then
+        -- Extend drag selection
+        self._sel_anchor = self._drag_anchor
+        self._cursor     = new_cursor
+        self._cursor_changed_time = reaper.time_precise()
       end
     end
   end
+
+  -- Reset playhead tracker when stopped
+  if not play_pos then self._playing_word_idx = nil end
+
+  -- Release drag when mouse lifted
+  if not mouse_down then self._drag_anchor = nil end
 
   -- Draw blinking caret
   if caret_x then
