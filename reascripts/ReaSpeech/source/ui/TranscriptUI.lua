@@ -603,7 +603,7 @@ end
 function TranscriptUI:render_editor_document()
   local margin = self.EDITOR_MARGIN
   local padding_x = ImGui.GetStyleVar(Ctx(), ImGui.StyleVar_WindowPadding())
-  local content_right = select(1, ImGui.GetContentRegionMax(Ctx()))
+  local content_right = ImGui.GetWindowWidth(Ctx()) - padding_x
   local draw_list = ImGui.GetWindowDrawList(Ctx())
   local sel_min, sel_max = self:editor_selection_range()
   local prev_seg_idx = nil
@@ -611,11 +611,10 @@ function TranscriptUI:render_editor_document()
 
   -- Capture layout metrics before any CalcTextSize calls (which can move the cursor
   -- in reaper-imgui as a side effect, corrupting subsequent GetCursorPosY reads).
-  local line_y   = ImGui.GetCursorPosY(Ctx())
-  local line_h   = ImGui.GetTextLineHeightWithSpacing(Ctx())
-  local space_w  = ImGui.CalcTextSize(Ctx(), ' ')
-  local spacing_y = select(2, ImGui.GetStyleVar(Ctx(), ImGui.StyleVar_ItemSpacing()))
-  local cur_x    = margin
+  local line_y  = ImGui.GetCursorPosY(Ctx())
+  local line_h  = ImGui.GetTextLineHeightWithSpacing(Ctx())
+  local space_w = ImGui.CalcTextSize(Ctx(), ' ')
+  local cur_x   = margin
 
   -- Playing word detection
   local play_state = reaper.GetPlayState()
@@ -659,8 +658,8 @@ function TranscriptUI:render_editor_document()
     -- Paragraph break at segment boundary
     if fw.seg_idx ~= prev_seg_idx then
       if prev_seg_idx then
-        -- Advance past last line + two item-spacing gaps (matches two Spacing() calls)
-        line_y = line_y + line_h + 2 * spacing_y
+        -- Advance past last line + extra visual gap between segments (≈ 1.5 lines total)
+        line_y = line_y + math.floor(line_h * 1.5)
       end
       -- Render timestamp at left padding column
       ImGui.SetCursorPos(Ctx(), padding_x, line_y)
