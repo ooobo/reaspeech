@@ -339,7 +339,6 @@ function TranscriptUI:_drop_zone_renderer(text, files)
     Fonts.wrap(Ctx(), Fonts.bigboi, function()
       local text_width, _ = ImGui.CalcTextSize(Ctx(), text)
       local _, avail_h = ImGui.GetContentRegionAvail(Ctx())
-      local y = ImGui.GetCursorPosY(Ctx()) + avail_h
 
       ImGui.SetCursorPosX(Ctx(), (ImGui.GetWindowWidth(Ctx()) - text_width) / 2)
       ImGui.SetCursorPosY(Ctx(), ImGui.GetCursorPosY(Ctx()) + avail_h / 3)
@@ -720,7 +719,6 @@ function TranscriptUI:render_editor_document()
       if cur_x + gap_w + word_w > content_right then
         line_y = line_y + line_h
         cur_x  = margin
-        gap_w  = 0  -- no leading gap at the start of a wrapped line
       else
         cur_x = cur_x + gap_w
       end

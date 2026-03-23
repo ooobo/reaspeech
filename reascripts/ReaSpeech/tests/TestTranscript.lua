@@ -652,7 +652,7 @@ end
 function TestTranscript:testMergeWords()
   local words = {
     self.word { word = "rene", start = 1.0, end_ = 1.5, probability = 1.0 },
-    self.word { word = "gade", start = 1.5, end_ = 2.0, probability = 0.5 }
+    self.word { word = "gade", start = 1.5, end_ = 2.0, probability = 0.5, word_start = false }
   }
   TranscriptSegment.merge_words(words, 1, 2)
   lu.assertEquals(#words, 1)
