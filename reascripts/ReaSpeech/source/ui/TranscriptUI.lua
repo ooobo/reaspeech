@@ -583,7 +583,7 @@ function TranscriptUI:render_editor_tab()
     return
   end
 
-  ImGui.TextDisabled(Ctx(), "Click or drag to select. Double-click selects word. Delete to cut. Refresh to apply.")
+  ImGui.TextDisabled(Ctx(), "Click or drag to select. Double-click selects word. Delete to cut. Changes apply live to 'ReaSpeech Editor' track.")
   ImGui.Separator(Ctx())
 
   local avail_w, avail_h = ImGui.GetContentRegionAvail(Ctx())
@@ -825,6 +825,7 @@ function TranscriptUI:handle_editor_keys()
       self._cursor = sel_min - 1
       self._sel_anchor = nil
       self._cursor_changed_time = reaper.time_precise()
+      self:apply_editor_to_timeline()
     end
   end
 
@@ -867,6 +868,23 @@ function TranscriptUI:handle_editor_keys()
   end
 end
 
+TranscriptUI.EDITOR_TRACK_NAME = 'ReaSpeech Editor'
+
+function TranscriptUI:find_or_create_editor_track()
+  for i = 0, reaper.CountTracks(0) - 1 do
+    local track = reaper.GetTrack(0, i)
+    local _, name = reaper.GetSetMediaTrackInfo_String(track, 'P_NAME', '', false)
+    if name == self.EDITOR_TRACK_NAME then
+      return track
+    end
+  end
+  local track_idx = reaper.CountTracks(0)
+  reaper.InsertTrackAtIndex(track_idx, false)
+  local track = reaper.GetTrack(0, track_idx)
+  reaper.GetSetMediaTrackInfo_String(track, 'P_NAME', self.EDITOR_TRACK_NAME, true)
+  return track
+end
+
 function TranscriptUI:apply_editor_to_timeline()
   -- Group consecutive non-deleted words into ranges
   local groups = {}
@@ -891,18 +909,14 @@ function TranscriptUI:apply_editor_to_timeline()
     end
   end
 
-  if #groups == 0 then
-    reaper.ShowConsoleMsg("ReaSpeech: No words retained — nothing to place on timeline.\n")
-    return
-  end
-
   reaper.Undo_BeginBlock()
 
-  -- Create a new track for the rearranged audio
-  local track_idx = reaper.CountTracks(0)
-  reaper.InsertTrackAtIndex(track_idx, false)
-  local new_track = reaper.GetTrack(0, track_idx)
-  reaper.GetSetMediaTrackInfo_String(new_track, 'P_NAME', 'ReaSpeech Recut', true)
+  local track = self:find_or_create_editor_track()
+
+  -- Clear all existing items from the track
+  while reaper.CountTrackMediaItems(track) > 0 do
+    reaper.DeleteTrackMediaItem(track, reaper.GetTrackMediaItem(track, 0))
+  end
 
   -- Place each word group sequentially with no gaps
   local cursor = 0.0
@@ -916,7 +930,7 @@ function TranscriptUI:apply_editor_to_timeline()
       local length = group.end_time - group.start_time
 
       if length > 0 then
-        local item = reaper.AddMediaItemToTrack(new_track)
+        local item = reaper.AddMediaItemToTrack(track)
         reaper.SetMediaItemInfo_Value(item, 'D_POSITION', cursor)
         reaper.SetMediaItemInfo_Value(item, 'D_LENGTH', length)
         local take = reaper.AddTakeToMediaItem(item)
