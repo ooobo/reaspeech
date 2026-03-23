@@ -338,10 +338,11 @@ function TranscriptUI:_drop_zone_renderer(text, files)
   return function(_)
     Fonts.wrap(Ctx(), Fonts.bigboi, function()
       local text_width, _ = ImGui.CalcTextSize(Ctx(), text)
-      local _, y = ImGui.GetContentRegionMax(Ctx())
+      local _, avail_h = ImGui.GetContentRegionAvail(Ctx())
+      local y = ImGui.GetCursorPosY(Ctx()) + avail_h
 
       ImGui.SetCursorPosX(Ctx(), (ImGui.GetWindowWidth(Ctx()) - text_width) / 2)
-      ImGui.SetCursorPosY(Ctx(), y / 3)
+      ImGui.SetCursorPosY(Ctx(), ImGui.GetCursorPosY(Ctx()) + avail_h / 3)
       ImGui.Text(Ctx(), text)
     end, Trap)
 
