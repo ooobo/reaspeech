@@ -575,6 +575,46 @@ function TranscriptUI:init_editor_segments()
     end
   end
   self._editor_initialized = true
+  self:compute_editor_times()
+end
+
+-- Simulate the grouping pass to find where each segment's audio starts in the
+-- editor-track output.  Result stored in self._editor_times[seg_idx] (number),
+-- or nil if the segment has no remaining non-deleted words.
+function TranscriptUI:compute_editor_times()
+  local times = {}
+  local cursor = 0.0
+  local current = nil
+
+  for _, fw in ipairs(self._flat_words) do
+    if not fw.deleted then
+      if current and current.segment == fw.segment then
+        current.end_time = fw.word.end_
+      else
+        -- Flush previous group
+        if current then
+          cursor = cursor + (current.end_time - current.start_time)
+        end
+        -- Record where this segment starts in the output (first group only)
+        if not times[fw.seg_idx] then
+          times[fw.seg_idx] = cursor
+        end
+        current = {
+          segment  = fw.segment,
+          start_time = fw.word.start,
+          end_time   = fw.word.end_,
+        }
+      end
+    else
+      -- Deleted word breaks continuity
+      if current then
+        cursor = cursor + (current.end_time - current.start_time)
+        current = nil
+      end
+    end
+  end
+
+  self._editor_times = times
 end
 
 function TranscriptUI:render_editor_tab()
@@ -663,9 +703,16 @@ function TranscriptUI:render_editor_document()
         line_y = line_y + math.floor(line_h * 1.5)
       end
       -- Render timestamp at left padding column
+      -- Use editor-track output time if available; fall back to original time
+      -- in muted color when the segment is fully deleted from the output.
       ImGui.SetCursorPos(Ctx(), padding_x, line_y)
-      local ts = TranscriptUI.format_timestr(fw.segment:timeline_start_time())
-      ImGui.TextDisabled(Ctx(), ts)
+      local editor_time = self._editor_times and self._editor_times[fw.seg_idx]
+      if editor_time then
+        ImGui.TextDisabled(Ctx(), TranscriptUI.format_timestr(editor_time))
+      else
+        ImGui.TextColored(Ctx(), self.EDITOR_DELETED_COLOR,
+          TranscriptUI.format_timestr(fw.segment:timeline_start_time()))
+      end
       cur_x = margin
       prev_seg_idx = fw.seg_idx
     else
@@ -825,6 +872,7 @@ function TranscriptUI:handle_editor_keys()
       self._cursor = sel_min - 1
       self._sel_anchor = nil
       self._cursor_changed_time = reaper.time_precise()
+      self:compute_editor_times()
       self:apply_editor_to_timeline()
     end
   end
