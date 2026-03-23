@@ -603,11 +603,19 @@ end
 function TranscriptUI:render_editor_document()
   local margin = self.EDITOR_MARGIN
   local padding_x = ImGui.GetStyleVar(Ctx(), ImGui.StyleVar_WindowPadding())
-  local content_right = ImGui.GetWindowWidth(Ctx()) - padding_x
+  local content_right = select(1, ImGui.GetContentRegionMax(Ctx()))
   local draw_list = ImGui.GetWindowDrawList(Ctx())
   local sel_min, sel_max = self:editor_selection_range()
   local prev_seg_idx = nil
   local caret_x, caret_y1, caret_y2
+
+  -- Capture layout metrics before any CalcTextSize calls (which can move the cursor
+  -- in reaper-imgui as a side effect, corrupting subsequent GetCursorPosY reads).
+  local line_y   = ImGui.GetCursorPosY(Ctx())
+  local line_h   = ImGui.GetTextLineHeightWithSpacing(Ctx())
+  local space_w  = ImGui.CalcTextSize(Ctx(), ' ')
+  local spacing_y = select(2, ImGui.GetStyleVar(Ctx(), ImGui.StyleVar_ItemSpacing()))
+  local cur_x    = margin
 
   -- Playing word detection
   local play_state = reaper.GetPlayState()
@@ -644,36 +652,35 @@ function TranscriptUI:render_editor_document()
 
   for i, fw in ipairs(self._flat_words) do
     local display = self.word_display_text(fw)
+    local word_w  = ImGui.CalcTextSize(Ctx(), display)
+    local is_word_start = fw.word.word_start ~= false
+    local gap_w   = is_word_start and space_w or 0
 
     -- Paragraph break at segment boundary
     if fw.seg_idx ~= prev_seg_idx then
       if prev_seg_idx then
-        ImGui.Spacing(Ctx())
-        ImGui.Spacing(Ctx())
+        -- Advance past last line + two item-spacing gaps (matches two Spacing() calls)
+        line_y = line_y + line_h + 2 * spacing_y
       end
+      -- Render timestamp at left padding column
+      ImGui.SetCursorPos(Ctx(), padding_x, line_y)
       local ts = TranscriptUI.format_timestr(fw.segment:timeline_start_time())
       ImGui.TextDisabled(Ctx(), ts)
-      ImGui.SameLine(Ctx(), margin)
+      cur_x = margin
       prev_seg_idx = fw.seg_idx
     else
-      -- Word wrapping within segment
-      ImGui.SameLine(Ctx(), 0, 0)
-      local cx = ImGui.GetCursorPosX(Ctx())
-      local cy = ImGui.GetCursorPosY(Ctx())
-      local line_h = ImGui.GetTextLineHeightWithSpacing(Ctx())
-      local word_w = ImGui.CalcTextSize(Ctx(), display)
-      local is_word_start = fw.word.word_start ~= false
-      local gap_w = is_word_start and ImGui.CalcTextSize(Ctx(), ' ') or 0
-
-      if cx + gap_w + word_w > content_right then
-        ImGui.SetCursorPos(Ctx(), margin, cy + line_h)
-      elseif is_word_start then
-        ImGui.Text(Ctx(), ' ')
-        ImGui.SameLine(Ctx(), 0, 0)
+      -- Word wrapping within segment: check if word + gap fits on current line
+      if cur_x + gap_w + word_w > content_right then
+        line_y = line_y + line_h
+        cur_x  = margin
+        gap_w  = 0  -- no leading gap at the start of a wrapped line
+      else
+        cur_x = cur_x + gap_w
       end
     end
 
-    -- Render word text
+    -- Place cursor explicitly and render word text
+    ImGui.SetCursorPos(Ctx(), cur_x, line_y)
     if fw.deleted then
       ImGui.TextColored(Ctx(), self.EDITOR_DELETED_COLOR, display)
       local rx, ry = ImGui.GetItemRectMin(Ctx())
@@ -688,6 +695,9 @@ function TranscriptUI:render_editor_document()
       end
       ImGui.TextColored(Ctx(), color, display)
     end
+
+    -- Advance horizontal position past the rendered word
+    cur_x = cur_x + word_w
 
     -- Collect item rect once for all overlay/interaction uses
     local rx, ry   = ImGui.GetItemRectMin(Ctx())
