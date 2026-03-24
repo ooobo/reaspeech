@@ -104,8 +104,9 @@ function ASRPlugin:handle_response(job_count)
         local source_length = item_length * playrate
         local clip_end = startoffs + source_length
 
-        -- Check if segment overlaps the clipped portion
-        if segment['end'] > startoffs and segment.start < clip_end then
+        -- Assign segment to the clip where it starts (not merely overlaps),
+        -- so a segment straddling two adjacent clips isn't added to both.
+        if segment.start >= startoffs and segment.start < clip_end then
           -- Create segment for this item/take
           local from_response = TranscriptSegment.from_response(segment, item, take)
 

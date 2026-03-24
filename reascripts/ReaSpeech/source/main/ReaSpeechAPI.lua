@@ -194,29 +194,6 @@ function ReaSpeechAPI:transcribe(audio_file, options)
           end
           f:close()
           self.logger:log("Parsed " .. #self.segments .. " segments from output")
-
-          -- Deduplicate segments from chunk overlap: remove segments where
-          -- text matches and start times are within 1 second of each other.
-          table.sort(self.segments, function(a, b) return a.start < b.start end)
-          local deduped = {}
-          for _, seg in ipairs(self.segments) do
-            local is_dup = false
-            for i = #deduped, math.max(1, #deduped - 10), -1 do
-              local prev = deduped[i]
-              if seg.start - prev.start > 1.0 then break end
-              if seg.text == prev.text then
-                is_dup = true
-                break
-              end
-            end
-            if not is_dup then
-              table.insert(deduped, seg)
-            end
-          end
-          if #deduped < #self.segments then
-            self.logger:log("Deduplicated " .. (#self.segments - #deduped) .. " overlapping segments")
-          end
-          self.segments = deduped
         end
 
         -- Check for errors in stderr
