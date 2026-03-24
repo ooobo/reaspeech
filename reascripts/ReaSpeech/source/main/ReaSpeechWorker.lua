@@ -4,9 +4,7 @@
 
 ]]--
 
-ReaSpeechWorker = Polo {
-  PROCESS_TIMEOUT = 600,  -- 10 minutes in seconds
-}
+ReaSpeechWorker = Polo {}
 
 function ReaSpeechWorker:init()
   assert(self.requests, 'missing requests')
@@ -301,14 +299,5 @@ function ReaSpeechWorker:check_active_job()
   elseif active_job.process:error() then
     self:handle_error(active_job, active_job.process:error())
     self.active_job = nil
-  else
-    -- Check for timeout
-    local elapsed = reaper.time_precise() - active_job.process.start_time
-    if elapsed > self.PROCESS_TIMEOUT then
-      self:log("ERROR: Process timed out after " .. math.floor(elapsed) .. "s")
-      self:handle_error(active_job, "Transcription timed out after "
-        .. math.floor(elapsed) .. " seconds")
-      self.active_job = nil
-    end
   end
 end
