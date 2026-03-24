@@ -42,10 +42,12 @@ TranscriptSegment._tokens_to_words = function(tokens)
   local words = {}
   for _, tok in ipairs(tokens) do
     local text = tok.token
+    local word_start = text:match('^%s') ~= nil or #words == 0
+    text = text:match('^%s+(.*)') or text
     if #text == 0 then goto continue end
     table.insert(words, TranscriptWord.new({
       word = text,
-      word_start = true,
+      word_start = word_start,
       start = tok.start,
       end_ = tok['end'],
       probability = 1.0,
