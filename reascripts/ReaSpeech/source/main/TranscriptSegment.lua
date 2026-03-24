@@ -50,7 +50,7 @@ TranscriptSegment._tokens_to_words = function(tokens)
       word_start = word_start,
       start = tok.start,
       end_ = tok['end'],
-      probability = tok.probability or 1.0,
+      probability = 1.0,
     }))
     ::continue::
   end
