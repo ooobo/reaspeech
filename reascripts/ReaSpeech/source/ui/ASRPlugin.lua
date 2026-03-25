@@ -86,45 +86,42 @@ function ASRPlugin:handle_response(job_count)
     local fallback_take = job.project_entries[1] and job.project_entries[1].take
     transcript:add_raw_transcription(job.path, segments, fallback_item, fallback_take)
 
-    -- For each transcription segment, create entries for ALL item/take pairs where it appears
-    -- This creates duplicate entries when the same audio appears multiple times on timeline
+    -- For each transcription segment, assign it to exactly the one clip it
+    -- overlaps the most.  Using a simple overlap check would add a segment to
+    -- every clip whose source range it touches (e.g. two adjacent clips from
+    -- the same file, or a tiny clip nested inside a larger one), producing
+    -- duplicate rows in the transcript table.
     for _, segment in pairs(segments) do
-      local created_any = false
+      local best_entry = nil
+      local best_overlap = 0
 
-      -- Check each item/take pair where the file appears
       for _, project_entry in pairs(job.project_entries) do
         local item = project_entry.item
         local take = project_entry.take
 
-        -- Check if this segment is within this item's clip boundaries
         local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
         local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
         local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
+        local clip_end = startoffs + item_length * playrate
 
-        local source_length = item_length * playrate
-        local clip_end = startoffs + source_length
+        local overlap = math.max(0,
+          math.min(segment['end'], clip_end) - math.max(segment.start, startoffs))
 
-        -- Assign segment to the clip where it starts (not merely overlaps),
-        -- so a segment straddling two adjacent clips isn't added to both.
-        if segment.start >= startoffs and segment.start < clip_end then
-          -- Create segment for this item/take
-          local from_response = TranscriptSegment.from_response(segment, item, take)
-
-          for _, s in pairs(from_response) do
-            if s:get('text') then
-              transcript:add_segment(s)
-              created_any = true
-            end
-          end
+        if overlap > best_overlap then
+          best_overlap = overlap
+          best_entry = project_entry
         end
       end
 
-      -- If segment wasn't on timeline in any clip, create with first item/take as fallback
-      if not created_any and job.project_entries[1] then
-        local item = job.project_entries[1].item
-        local take = job.project_entries[1].take
-        local from_response = TranscriptSegment.from_response(segment, item, take)
+      -- Fall back to the first clip if there was no overlap (e.g. segment is
+      -- entirely before/after every clip's source range).
+      if not best_entry then
+        best_entry = job.project_entries[1]
+      end
 
+      if best_entry then
+        local from_response = TranscriptSegment.from_response(
+          segment, best_entry.item, best_entry.take)
         for _, s in pairs(from_response) do
           if s:get('text') then
             transcript:add_segment(s)
