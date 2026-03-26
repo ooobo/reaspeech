@@ -60,7 +60,9 @@ function ColumnLayout:_horiz_margin(margin)
 end
 
 function ColumnLayout:_vert_margin(margin, width)
-  ImGui.Dummy(Ctx(), width, margin)
+  if margin > 0 then
+    ImGui.Dummy(Ctx(), width, margin)
+  end
 end
 
 function ColumnLayout:_with_group(f)

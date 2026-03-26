@@ -314,7 +314,9 @@ function ReaSpeechControlsUI:render_tab_content()
 
   for _, tab in ipairs(self.plugins:tabs()) do
     if tab.tab.key == tab_bar_value then
-      if ImGui.BeginChild(Ctx(), 'tab-content', 0, 0) then
+      if ImGui.BeginChild(Ctx(), 'tab-content', 0, 0,
+          ImGui.ChildFlags_None(),
+          ImGui.WindowFlags_NoScrollbar()) then
         Trap(function()
           tab:render()
         end)

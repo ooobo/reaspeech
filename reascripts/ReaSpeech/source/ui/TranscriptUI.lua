@@ -484,8 +484,9 @@ function TranscriptUI:render_options()
 
 end
 
-function TranscriptUI:render_search(column)
-  ImGui.PushItemWidth(Ctx(), column.width)
+function TranscriptUI:render_search(_column)
+  local avail_w = ImGui.GetContentRegionAvail(Ctx())
+  ImGui.PushItemWidth(Ctx(), avail_w)
   Trap(function()
     local search_changed, search = ImGui.InputTextWithHint(Ctx(), '##search', 'Search', self.transcript.search)
     if search_changed then
@@ -672,14 +673,18 @@ function TranscriptUI:render_editor_tab(state)
   self:sync_editor_with_timeline(state)
 
   local track_name = self:editor_track_name(state.source_path)
-  ImGui.TextDisabled(Ctx(), "Click or drag to select. Double-click selects word. Delete to cut. Changes apply live to '" .. track_name .. "' track.")
+  local help_text = "Click or drag to select, delete to cut or uncut. Alt-up/down to move. Changes apply live to '" .. track_name .. "' track."
+  local help_h = ImGui.GetTextLineHeightWithSpacing(Ctx())
+  if ImGui.BeginChild(Ctx(), '##editor_help', 0, help_h, ImGui.ChildFlags_None(), ImGui.WindowFlags_NoScrollbar()) then
+    ImGui.TextDisabled(Ctx(), help_text)
+  end
+  ImGui.EndChild(Ctx())
   ImGui.Separator(Ctx())
 
   local avail_w, avail_h = ImGui.GetContentRegionAvail(Ctx())
   if ImGui.BeginChild(Ctx(), '##editor_scroll', avail_w, avail_h - 5,
       ImGui.ChildFlags_None(),
-      ImGui.WindowFlags_NoMove() | ImGui.WindowFlags_NoScrollbar()
-        | ImGui.WindowFlags_AlwaysVerticalScrollbar()
+      ImGui.WindowFlags_NoMove()
         | ImGui.WindowFlags_NoNavInputs()) then
     Trap(function() self:render_editor_document(state) end)
     Trap(function() self:handle_editor_keys(state) end)
