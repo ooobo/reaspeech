@@ -28,6 +28,7 @@ function ASRPlugin:asr(jobs)
 
   local options = {
     model = controls_data.model_name,
+    diarize = controls_data.diarize,
   }
 
   -- consolidate jobs by path, retaining a collection of

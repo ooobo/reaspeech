@@ -797,6 +797,11 @@ function TranscriptUI:render_editor_document(state)
         self:render_editor_speaker(state, fw.seg_idx, speaker, padding_x, line_y)
         line_y = line_y + line_h
         prev_speaker = speaker
+      elseif not prev_seg_idx and speaker == '' then
+        -- First segment with no speaker data: show a hint
+        ImGui.SetCursorPos(Ctx(), padding_x, line_y)
+        ImGui.TextDisabled(Ctx(), "Turn Identify speakers on in settings to see speaker names")
+        line_y = line_y + line_h
       end
 
       -- Render move arrows and timestamp

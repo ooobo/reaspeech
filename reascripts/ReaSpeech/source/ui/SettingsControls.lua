@@ -44,10 +44,11 @@ function SettingsControls:init()
 end
 
 function SettingsControls:init_model()
-  -- Access the shared ASR model setting
+  -- Access the shared ASR settings
   local asr_plugin = app.plugins:get_plugin('asr')
   if asr_plugin and asr_plugin._controls then
     self.model_name = asr_plugin._controls.model_name
+    self.diarize = asr_plugin._controls.diarize
   end
 end
 
@@ -106,6 +107,9 @@ end
 function SettingsControls:render_model()
   if self.model_name then
     self.model_name:render()
+  end
+  if self.diarize then
+    self.diarize:render()
   end
 end
 

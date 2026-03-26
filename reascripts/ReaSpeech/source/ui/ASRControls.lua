@@ -37,9 +37,11 @@ function ASRControls:init()
 
   self.settings = {
     model_name = storage:string('model_name', self.DEFAULT_MODEL_NAME),
+    diarize = storage:boolean('diarize', false),
   }
 
   self:init_model_name()
+  self:init_diarize()
 
   self.actions = ASRActions.new(self.plugin)
   self.alert_popup = AlertPopup.new {}
@@ -54,6 +56,14 @@ function ASRControls:init_model_name()
     help_text = self.HELP_MODEL,
     items = Models.get_model_names(self.asr_engine),
     item_labels = self:get_model_labels(),
+  }
+end
+
+function ASRControls:init_diarize()
+  self.diarize = Widgets.Checkbox.new {
+    state = self.settings.diarize,
+    label_long = 'Identify speakers (can take 1.5-2x longer to transcribe)',
+    label_short = 'Identify speakers',
   }
 end
 
@@ -115,6 +125,7 @@ end
 function ASRControls:get_request_data()
   return {
     model_name = self.model_name:value(),
+    diarize = self.diarize:value(),
   }
 end
 
