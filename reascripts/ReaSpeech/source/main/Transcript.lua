@@ -5,11 +5,12 @@
 ]]--
 
 Transcript = Polo {
-  COLUMN_ORDER = {"id", "start", "end", "raw-start", "raw-end", "text", "score", "file", "avg_logprob"},
+  COLUMN_ORDER = {"id", "start", "end", "raw-start", "raw-end", "text", "score", "file", "track", "avg_logprob"},
   DEFAULT_HIDE = {
     seek = true, temperature = true, tokens = true, avg_logprob = true,
     compression_ratio = true, no_speech_prob = true,
-    ['raw-start'] = true, ['raw-end'] = true
+    ['raw-start'] = true, ['raw-end'] = true,
+    score = true, speaker = true,
   },
 
   init = function(self)
@@ -40,7 +41,7 @@ end
 function Transcript:get_columns()
   if #self.init_data > 0 then
     -- Include virtual columns that are computed in TranscriptSegment:get()
-    local columns = {"score", "file", "raw-start", "raw-end"}
+    local columns = {"score", "file", "track", "raw-start", "raw-end"}
     local row = self.init_data[1]
     for k, _ in pairs(row.data) do
       if k:sub(1, 1) ~= '_' then
@@ -410,13 +411,24 @@ function Transcript:update()
 
   local columns = self:get_columns()
 
+  -- Start with all data, then apply segment filter and search
+  local source_data = self.init_data
+  if self.segment_filter then
+    source_data = {}
+    for _, segment in pairs(self.init_data) do
+      if self.segment_filter(segment) then
+        table.insert(source_data, segment)
+      end
+    end
+  end
+
   if #self.search > 0 then
     local search = self.search
     local search_lower = search:lower()
     local match_case = (search ~= search_lower)
     self.filtered_data = {}
 
-    for _, segment in pairs(self.init_data) do
+    for _, segment in pairs(source_data) do
       local matching = false
       for _, column in pairs(columns) do
         if match_case then
@@ -436,7 +448,7 @@ function Transcript:update()
       end
     end
   else
-    self.filtered_data = self.init_data
+    self.filtered_data = source_data
   end
 
   self.data = self.filtered_data

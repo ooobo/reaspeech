@@ -42,8 +42,15 @@ TranscriptSegment._tokens_to_words = function(tokens)
   local words = {}
   for _, tok in ipairs(tokens) do
     local text = tok.token
-    local word_start = text:match('^%s') ~= nil or #words == 0
-    text = text:match('^%s+(.*)') or text
+    local word_start = text:match('^[%s\xe2\x96\x81]') ~= nil or #words == 0
+    -- Digit after non-digit indicates a word boundary (e.g. "the" + "24")
+    if not word_start and #words > 0 and text:match('^%d') then
+      local prev_last = words[#words].word:sub(-1)
+      if not prev_last:match('%d') then
+        word_start = true
+      end
+    end
+    text = text:match('^[\xe2\x96\x81%s]+(.*)') or text
     if #text == 0 then goto continue end
     table.insert(words, TranscriptWord.new({
       word = text,
@@ -70,6 +77,15 @@ TranscriptSegment.from_response = function(segment, item, take)
   local transcript_words = nil
   if raw_tokens then
     transcript_words = TranscriptSegment._tokens_to_words(raw_tokens)
+    -- Reconstruct text from tokens with proper word_start spacing
+    local parts = {}
+    for i, w in ipairs(transcript_words) do
+      if i > 1 and w.word_start then
+        table.insert(parts, ' ')
+      end
+      table.insert(parts, w.word)
+    end
+    segment.text = table.concat(parts)
   elseif raw_words then
     transcript_words = {}
     for _, word in pairs(raw_words) do
@@ -134,9 +150,8 @@ end
 TranscriptSegment.merge_words = function(words, index1, index2)
   local word1 = words[index1]
   local word2 = words[index2]
-  local sep = (word2.word_start and word1.word_start) and ' ' or ''
   local new_word = TranscriptWord.new {
-    word = word1.word .. sep .. word2.word,
+    word = word1.word .. word2.word,
     word_start = word1.word_start,
     start = word1.start,
     end_ = word2.end_,
@@ -191,6 +206,8 @@ end
 function TranscriptSegment:get(column, default)
   if column == 'score' then
     return self:score()
+  elseif column == 'track' then
+    return self:get_track_name() or default
   elseif column == 'start' then
     -- Return timeline start time for consistency with UI display and sorting
     return self:timeline_start_time()
@@ -206,6 +223,16 @@ function TranscriptSegment:get(column, default)
   else
     return default
   end
+end
+
+function TranscriptSegment:get_track_name()
+  if not self.item or not reaper.ValidatePtr2(0, self.item, 'MediaItem*') then
+    return nil
+  end
+  local track = reaper.GetMediaItemTrack(self.item)
+  if not track then return nil end
+  local _, name = reaper.GetSetMediaTrackInfo_String(track, 'P_NAME', '', false)
+  return name ~= '' and name or nil
 end
 
 function TranscriptSegment:set_words(words)

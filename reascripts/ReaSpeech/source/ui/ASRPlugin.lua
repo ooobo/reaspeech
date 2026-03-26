@@ -80,18 +80,47 @@ function ASRPlugin:handle_response(job_count)
     local segments = response[1].segments
     local job = response._job
 
-    -- Store raw transcription data for later regeneration
-    -- Include first item/take as fallback reference for when clips are removed from timeline
     local fallback_item = job.project_entries[1] and job.project_entries[1].item
     local fallback_take = job.project_entries[1] and job.project_entries[1].take
-    transcript:add_raw_transcription(job.path, segments, fallback_item, fallback_take)
 
-    -- For each transcription segment, assign it to exactly the one clip it
-    -- overlaps the most.  Using a simple overlap check would add a segment to
-    -- every clip whose source range it touches (e.g. two adjacent clips from
-    -- the same file, or a tiny clip nested inside a larger one), producing
-    -- duplicate rows in the transcript table.
+    -- Merge short fragment segments into previous (e.g. "D." + "C." -> "D.C.")
+    local merged = {}
+    for _, segment in ipairs(segments) do
+      local text = (segment.text or ''):match("^%s*(.-)%s*$")
+      local prev = merged[#merged]
+      if prev and #text <= 4 then
+        -- Append fragment to previous segment's text and extend its end time
+        prev.text = prev.text .. ' ' .. text
+        prev['end'] = segment['end']
+        -- Merge tokens if present
+        if prev.tokens and segment.tokens then
+          for _, tok in ipairs(segment.tokens) do
+            table.insert(prev.tokens, tok)
+          end
+        end
+        -- Merge words if present
+        if prev.words and segment.words then
+          for _, w in ipairs(segment.words) do
+            table.insert(prev.words, w)
+          end
+        end
+      else
+        table.insert(merged, segment)
+      end
+    end
+    segments = merged
+
+    -- Deduplicate overlapping segments from chunk boundaries
+    local seen_texts = {}
     for _, segment in pairs(segments) do
+      local text = segment.text:match("^%s*(.-)%s*$")
+      local prev_end = seen_texts[text]
+      if prev_end and segment.start < prev_end then
+        goto next_segment
+      end
+      seen_texts[text] = segment['end']
+
+      -- Assign segment to the clip with the most overlap to avoid duplicates
       local best_entry = nil
       local best_overlap = 0
 
@@ -113,8 +142,6 @@ function ASRPlugin:handle_response(job_count)
         end
       end
 
-      -- Fall back to the first clip if there was no overlap (e.g. segment is
-      -- entirely before/after every clip's source range).
       if not best_entry then
         best_entry = job.project_entries[1]
       end
@@ -128,7 +155,12 @@ function ASRPlugin:handle_response(job_count)
           end
         end
       end
+
+      ::next_segment::
     end
+
+    -- Store processed segments for later regeneration
+    transcript:add_raw_transcription(job.path, segments, fallback_item, fallback_take)
 
     transcript:update()
     -- Sort by start time ascending by default for most useful view

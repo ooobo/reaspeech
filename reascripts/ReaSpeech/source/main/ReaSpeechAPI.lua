@@ -117,6 +117,10 @@ function ReaSpeechAPI:transcribe(audio_file, options)
   -- Add JSON output flag
   table.insert(command_parts, "--json")
 
+  -- Add diarization and token-level output
+  table.insert(command_parts, "--diarize")
+  table.insert(command_parts, "--tokens")
+
   -- Add completion marker argument
   table.insert(command_parts, "--completion-marker")
   table.insert(command_parts, self:quote_path(marker_file))
