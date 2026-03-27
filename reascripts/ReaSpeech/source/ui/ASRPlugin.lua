@@ -114,7 +114,7 @@ function ASRPlugin:handle_response(job_count)
     -- so legitimately repeated phrases are preserved.
     local seen_segments = {}
     for _, segment in ipairs(segments) do
-      local text = segment.text:match("^%s*(.-)%s*$")
+      local text = (segment.text or ''):match("^%s*(.-)%s*$")
       local dominated = false
       if seen_segments[text] then
         for _, prev in ipairs(seen_segments[text]) do
