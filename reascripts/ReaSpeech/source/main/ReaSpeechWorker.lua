@@ -96,10 +96,9 @@ function ReaSpeechWorker:progress()
   -- then we can use that fraction
   if self.active_job then
     local active_job = self.active_job
-    if active_job.process and not active_job.process:ready() then
+    if active_job.process and not active_job.process.complete then
       local process_progress = active_job.process:progress()
       if process_progress then
-        -- Normalize progress to 0-1 range (rough estimate)
         active_job_progress = math.min(process_progress / 100, 1.0)
       end
     end
@@ -114,7 +113,7 @@ end
 function ReaSpeechWorker:status()
   if self.active_job then
     local active_job = self.active_job
-    if active_job.process and not active_job.process:ready() then
+    if active_job.process and not active_job.process.complete then
       return 'Processing'
     end
   end

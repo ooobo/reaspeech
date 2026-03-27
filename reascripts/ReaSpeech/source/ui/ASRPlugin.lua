@@ -12,7 +12,6 @@ function ASRPlugin:init()
   assert(self.app, 'ASRPlugin: plugin host app is required')
   Logging().init(self, 'ASRPlugin')
   self._controls = ASRControls.new(self)
-  self._actions = ASRActions.new(self)
 end
 
 function ASRPlugin:key()
@@ -38,7 +37,7 @@ function ASRPlugin:asr(jobs)
 
   local consolidated_jobs = {}
   local seen_path_index = {}
-  for _, job in pairs(jobs) do
+  for _, job in ipairs(jobs) do
     local path = job.path
 
     if not seen_path_index[path] then
@@ -84,22 +83,21 @@ function ASRPlugin:handle_response(job_count)
     local fallback_item = job.project_entries[1] and job.project_entries[1].item
     local fallback_take = job.project_entries[1] and job.project_entries[1].take
 
-    -- Merge short fragment segments into previous (e.g. "D." + "C." -> "D.C.")
+    -- Merge short fragment segments into previous when they are adjacent
+    -- (e.g. "D." + "C." -> "D.C." from the same chunk boundary)
     local merged = {}
     for _, segment in ipairs(segments) do
       local text = (segment.text or ''):match("^%s*(.-)%s*$")
       local prev = merged[#merged]
-      if prev and #text <= 4 then
-        -- Append fragment to previous segment's text and extend its end time
+      -- Only merge if fragment is short AND adjacent (gap < 0.5s) to previous
+      if prev and #text <= 4 and (segment.start - prev['end']) < 0.5 then
         prev.text = prev.text .. ' ' .. text
         prev['end'] = segment['end']
-        -- Merge tokens if present
         if prev.tokens and segment.tokens then
           for _, tok in ipairs(segment.tokens) do
             table.insert(prev.tokens, tok)
           end
         end
-        -- Merge words if present
         if prev.words and segment.words then
           for _, w in ipairs(segment.words) do
             table.insert(prev.words, w)
@@ -111,21 +109,38 @@ function ASRPlugin:handle_response(job_count)
     end
     segments = merged
 
-    -- Deduplicate overlapping segments from chunk boundaries
-    local seen_texts = {}
-    for _, segment in pairs(segments) do
+    -- Deduplicate overlapping segments from chunk boundaries.
+    -- Only dedup when text matches AND timestamps substantially overlap,
+    -- so legitimately repeated phrases are preserved.
+    local seen_segments = {}
+    for _, segment in ipairs(segments) do
       local text = segment.text:match("^%s*(.-)%s*$")
-      local prev_end = seen_texts[text]
-      if prev_end and segment.start < prev_end then
+      local dominated = false
+      if seen_segments[text] then
+        for _, prev in ipairs(seen_segments[text]) do
+          -- Consider it a duplicate only if the overlap is > 50% of the shorter segment
+          local overlap = math.max(0,
+            math.min(segment['end'], prev.end_time) - math.max(segment.start, prev.start_time))
+          local shorter = math.min(
+            segment['end'] - segment.start,
+            prev.end_time - prev.start_time)
+          if shorter > 0 and overlap / shorter > 0.5 then
+            dominated = true
+            break
+          end
+        end
+      end
+      if dominated then
         goto next_segment
       end
-      seen_texts[text] = segment['end']
+      if not seen_segments[text] then seen_segments[text] = {} end
+      table.insert(seen_segments[text], { start_time = segment.start, end_time = segment['end'] })
 
       -- Assign segment to the clip with the most overlap to avoid duplicates
       local best_entry = nil
       local best_overlap = 0
 
-      for _, project_entry in pairs(job.project_entries) do
+      for _, project_entry in ipairs(job.project_entries) do
         local item = project_entry.item
         local take = project_entry.take
 
@@ -150,7 +165,7 @@ function ASRPlugin:handle_response(job_count)
       if best_entry then
         local from_response = TranscriptSegment.from_response(
           segment, best_entry.item, best_entry.take)
-        for _, s in pairs(from_response) do
+        for _, s in ipairs(from_response) do
           if s:get('text') then
             transcript:add_segment(s)
           end

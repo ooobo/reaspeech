@@ -61,25 +61,25 @@ function Transcript:_sort_columns(columns)
   local order_set = {}
   local result = {}
 
-  for _, column in pairs(columns) do
+  for _, column in ipairs(columns) do
     column_set[column] = true
   end
 
-  for _, column in pairs(order) do
+  for _, column in ipairs(order) do
     order_set[column] = true
     if column_set[column] then
       table.insert(result, column)
     end
   end
 
-  for _, column in pairs(columns) do
+  for _, column in ipairs(columns) do
     if not order_set[column] then
       table.insert(extra_columns, column)
     end
   end
 
   table.sort(extra_columns)
-  for _, column in pairs(extra_columns) do
+  for _, column in ipairs(extra_columns) do
     table.insert(result, column)
   end
 
@@ -106,7 +106,7 @@ function Transcript:regenerate()
   self.init_data = {}
 
   -- For each transcribed file, find all items on timeline and regenerate segments
-  for _, transcription in pairs(self.raw_transcriptions) do
+  for _, transcription in ipairs(self.raw_transcriptions) do
     local path = transcription.path
     local segments = transcription.segments
 
@@ -117,10 +117,10 @@ function Transcript:regenerate()
     local matching_items = self:find_items_by_path(path)
 
     -- For each segment, create entries for all matching items where it appears
-    for _, segment in pairs(segments) do
+    for _, segment in ipairs(segments) do
       local created_any = false
 
-      for _, entry in pairs(matching_items) do
+      for _, entry in ipairs(matching_items) do
         local item = entry.item
         local take = entry.take
 
@@ -138,7 +138,7 @@ function Transcript:regenerate()
             -- Create segment for this item/take
             local from_response = TranscriptSegment.from_response(segment, item, take)
 
-            for _, s in pairs(from_response) do
+            for _, s in ipairs(from_response) do
               if s:get('text') then
                 self:add_segment(s)
                 created_any = true
@@ -215,7 +215,7 @@ function Transcript:get_segments()
 end
 
 function Transcript:has_words()
-  for _, segment in pairs(self.init_data) do
+  for _, segment in ipairs(self.init_data) do
     if segment.words then return true end
   end
   return false
@@ -291,7 +291,9 @@ function Transcript:set_name(name)
 end
 
 function Transcript:sort(column, ascending)
-  self.data = {table.unpack(self.filtered_data)}
+  local copy = {}
+  for i = 1, #self.filtered_data do copy[i] = self.filtered_data[i] end
+  self.data = copy
   table.sort(self.data, function (a, b)
     local a_val, b_val = a:get(column), b:get(column)
 
@@ -374,7 +376,7 @@ function Transcript:to_table()
   -- Use init_data (source of truth) not self.data (filtered/sorted view)
   -- to avoid losing segments that are hidden by an active search filter
   local segments = {}
-  for _, segment in pairs(self.init_data) do
+  for _, segment in ipairs(self.init_data) do
     table.insert(segments, segment:to_table())
   end
 
@@ -395,7 +397,7 @@ function Transcript.from_json(json_str)
     name = data.name or ''
   }
 
-  for _, segment_data in pairs(data.segments) do
+  for _, segment_data in ipairs(data.segments) do
     local segment = TranscriptSegment.from_table(segment_data)
     t:add_segment(segment)
   end
@@ -415,7 +417,7 @@ function Transcript:update()
   local source_data = self.init_data
   if self.segment_filter then
     source_data = {}
-    for _, segment in pairs(self.init_data) do
+    for _, segment in ipairs(self.init_data) do
       if self.segment_filter(segment) then
         table.insert(source_data, segment)
       end
@@ -428,9 +430,9 @@ function Transcript:update()
     local match_case = (search ~= search_lower)
     self.filtered_data = {}
 
-    for _, segment in pairs(source_data) do
+    for _, segment in ipairs(source_data) do
       local matching = false
-      for _, column in pairs(columns) do
+      for _, column in ipairs(columns) do
         if match_case then
           if tostring(segment.data[column]):find(search) then
             matching = true

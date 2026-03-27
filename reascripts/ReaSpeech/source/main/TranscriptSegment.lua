@@ -64,6 +64,17 @@ TranscriptSegment._tokens_to_words = function(tokens)
   return words
 end
 
+TranscriptSegment._words_to_text = function(words)
+  local parts = {}
+  for _, w in ipairs(words) do
+    if w.word_start and #parts > 0 then
+      table.insert(parts, ' ')
+    end
+    table.insert(parts, w.word)
+  end
+  return table.concat(parts)
+end
+
 TranscriptSegment.from_response = function(segment, item, take)
   local result = {}
   local raw_words = segment.words
@@ -77,18 +88,10 @@ TranscriptSegment.from_response = function(segment, item, take)
   local transcript_words = nil
   if raw_tokens then
     transcript_words = TranscriptSegment._tokens_to_words(raw_tokens)
-    -- Reconstruct text from tokens with proper word_start spacing
-    local parts = {}
-    for i, w in ipairs(transcript_words) do
-      if i > 1 and w.word_start then
-        table.insert(parts, ' ')
-      end
-      table.insert(parts, w.word)
-    end
-    segment.text = table.concat(parts)
+    segment.text = TranscriptSegment._words_to_text(transcript_words)
   elseif raw_words then
     transcript_words = {}
-    for _, word in pairs(raw_words) do
+    for _, word in ipairs(raw_words) do
       table.insert(transcript_words, TranscriptWord.new({
         word = word.word:match("^%s*(.-)%s*$"),
         probability = word.probability,
@@ -116,7 +119,7 @@ TranscriptSegment.from_table = function(data)
 
   if words then
     local transcript_words = {}
-    for _, word in pairs(words) do
+    for _, word in ipairs(words) do
       table.insert(transcript_words, TranscriptWord.from_table(word))
     end
     data.words = transcript_words
@@ -194,7 +197,7 @@ end
 function TranscriptSegment:score()
   local score = 0.0
   if self.words and #self.words > 0 then
-    for _, word in pairs(self.words) do
+    for _, word in ipairs(self.words) do
       score = score + word:score()
     end
     return score / #self.words
@@ -241,14 +244,7 @@ function TranscriptSegment:set_words(words)
 end
 
 function TranscriptSegment:update_text()
-  local parts = {}
-  for _, word in ipairs(self.words) do
-    if word.word_start and #parts > 0 then
-      table.insert(parts, ' ')
-    end
-    table.insert(parts, word.word)
-  end
-  self.data['text'] = table.concat(parts)
+  self.data['text'] = TranscriptSegment._words_to_text(self.words)
 end
 
 function TranscriptSegment:get_file(include_extensions)
@@ -396,7 +392,7 @@ function TranscriptSegment:to_table()
   local result = self._copy(self.data)
   if self.words then
     result['words'] = {}
-    for _, word in pairs(self.words) do
+    for _, word in ipairs(self.words) do
       table.insert(result['words'], word:to_table())
     end
   end

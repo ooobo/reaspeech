@@ -68,17 +68,6 @@ function ASRControls:init_diarize()
 end
 
 function ASRControls:init_layouts()
-  self:init_actions_layout()
-end
-
-function ASRControls:init_actions_layout()
-  -- Actions are now rendered in ReaSpeechControlsUI below the logo
-  self.actions_layout = ColumnLayout.new {
-    column_padding = 10,
-    margin_left = ReaSpeechControlsUI.MARGIN_LEFT,
-    num_columns = 1,
-    render_column = function(_column) end
-  }
 end
 
 function ASRControls:render_bg()
@@ -86,7 +75,6 @@ function ASRControls:render_bg()
 end
 
 function ASRControls:render()
-  self.actions_layout:render()
   self.alert_popup:render()
 
   local margin = ReaSpeechControlsUI.MARGIN_LEFT
@@ -132,7 +120,7 @@ end
 function ASRControls:get_model_labels()
   local model_labels = {}
 
-  for _, model in pairs(Models.MODELS) do
+  for _, model in ipairs(Models.MODELS) do
     model_labels[model.name] = model.label
   end
 

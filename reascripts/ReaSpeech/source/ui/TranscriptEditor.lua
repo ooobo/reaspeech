@@ -58,7 +58,7 @@ function TranscriptEditor:edit_segment(segment, index)
     index = index,
     text = segment:get('text'),
   }
-  for i, word in pairs(segment.words) do
+  for i, word in ipairs(segment.words) do
     self.editing.words[i] = word:copy()
   end
   self:edit_word(1)
@@ -169,7 +169,7 @@ function TranscriptEditor:render_words()
   local spacing = ImGui.GetStyleVar(Ctx(), ImGui.StyleVar_ItemInnerSpacing())
   local edit_requested = nil
 
-  for i, word in pairs(words) do
+  for i, word in ipairs(words) do
     if self.editing.word_index ~= i then
       ImGui.PushStyleColor(Ctx(), ImGui.Col_Button(), 0xffffff33)
     end
@@ -232,20 +232,12 @@ function TranscriptEditor:render_time_input(label, value, callback)
 end
 
 function TranscriptEditor:render_score_input()
-  local color = TranscriptUI.score_color(self.editing.word:score())
-  if color then
-    ImGui.PushStyleColor(Ctx(), ImGui.Col_SliderGrab(), color)
-    ImGui.PushStyleColor(Ctx(), ImGui.Col_SliderGrabActive(), color)
-  end
   Trap(function ()
     local rv, value = ImGui.SliderDouble(Ctx(), 'score', self.editing.word.probability, 0, 1)
     if rv then
       self.editing.word.probability = value
     end
   end)
-  if color then
-    ImGui.PopStyleColor(Ctx(), 2)
-  end
 end
 
 function TranscriptEditor:render_word_actions()

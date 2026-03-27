@@ -788,7 +788,7 @@ function TestTranscript:testSegmentToJson()
   lu.assertEquals(keys, {"end", "probability", "start", "word"})
 end
 
-function TestTranscript:TestFromJson()
+function TestTranscript:testFromJson()
   reaper.CountMediaItems = function() return 2 end
   reaper.GetMediaItem = function(_, idx)
     if idx == 0 then
