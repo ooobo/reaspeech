@@ -125,16 +125,10 @@ function Transcript:regenerate()
         local take = entry.take
 
         -- Check if this segment is within this item's clip boundaries
-        if reaper.ValidatePtr2(0, item, 'MediaItem*') and reaper.ValidatePtr2(0, take, 'MediaItem_Take*') then
-          local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
-          local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
-          local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
-
-          local source_length = item_length * playrate
-          local clip_end = startoffs + source_length
-
+        local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+        if clip_end > 0 then
           -- Check if segment overlaps the clipped portion
-          if segment['end'] > startoffs and segment.start < clip_end then
+          if segment['end'] > clip_start and segment.start < clip_end then
             -- Create segment for this item/take
             local from_response = TranscriptSegment.from_response(segment, item, take)
 

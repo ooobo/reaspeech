@@ -18,6 +18,11 @@ TranscriptUI = Polo {
 
 }
 
+-- Helper: is this flat-word active (not deleted and not off-timeline)?
+local function fw_is_active(fw)
+  return not fw.deleted and not fw.off_timeline
+end
+
 TranscriptUI.table_flags = function (sortable)
   local sort_flags = 0
   if sortable then
@@ -572,11 +577,8 @@ function TranscriptUI:sync_editor_with_timeline(state)
         end
       end
 
-      local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
-      local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
-      local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
-      local clip_end = startoffs + item_length * playrate
-      table.insert(clip_bounds, { start = startoffs, end_ = clip_end })
+      local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+      table.insert(clip_bounds, { start = clip_start, end_ = clip_end })
     end
     ::skip_clip::
   end
@@ -724,7 +726,7 @@ function TranscriptUI:compute_editor_layout(state)
       editor_seg_times[fw.seg_idx] = ecursor
       seg_has_active[fw.seg_idx] = false
     end
-    if not fw.deleted and not fw.off_timeline then
+    if fw_is_active(fw) then
       local dur = fw.word.end_ - fw.word.start
       editor_word_start[idx] = ecursor
       editor_word_end[idx] = ecursor + dur
@@ -898,7 +900,7 @@ function TranscriptUI:render_editor_document(state)
     state._word_positions[i] = { x = cur_x, y = line_y, w = word_w }
 
     ImGui.SetCursorPos(Ctx(), cur_x, line_y)
-    local is_removed = fw.deleted or fw.off_timeline
+    local is_removed = not fw_is_active(fw)
     if is_removed then
       ImGui.TextColored(Ctx(), self.EDITOR_DELETED_COLOR, display)
       local rx, ry = ImGui.GetItemRectMin(Ctx())
@@ -1154,7 +1156,7 @@ function TranscriptUI:handle_editor_keys(state)
       local all_removed = true
       for i = sel_min, sel_max do
         local fw = state._flat_words[i]
-        if not fw.deleted and not fw.off_timeline then
+        if fw_is_active(fw) then
           all_removed = false
           break
         end
@@ -1169,7 +1171,7 @@ function TranscriptUI:handle_editor_keys(state)
           fw.force_include = true
         else
           -- Delete: mark as deleted (skip already-removed words)
-          if not fw.deleted and not fw.off_timeline then
+          if fw_is_active(fw) then
             fw.deleted = true
           end
         end
@@ -1523,7 +1525,7 @@ function TranscriptUI:apply_editor_to_timeline(state)
   local current = nil
 
   for _, fw in ipairs(state._flat_words) do
-    if not fw.deleted and not fw.off_timeline then
+    if fw_is_active(fw) then
       if current and current.segment == fw.segment and current.seg_idx == fw.seg_idx then
         current.end_time = fw.word.end_
       else

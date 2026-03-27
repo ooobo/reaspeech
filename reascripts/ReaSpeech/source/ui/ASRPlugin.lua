@@ -144,13 +144,10 @@ function ASRPlugin:handle_response(job_count)
         local item = project_entry.item
         local take = project_entry.take
 
-        local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
-        local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
-        local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
-        local clip_end = startoffs + item_length * playrate
+        local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
 
         local overlap = math.max(0,
-          math.min(segment['end'], clip_end) - math.max(segment.start, startoffs))
+          math.min(segment['end'], clip_end) - math.max(segment.start, clip_start))
 
         if overlap > best_overlap then
           best_overlap = overlap

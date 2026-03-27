@@ -309,39 +309,32 @@ function TranscriptSegment:navigate(word_index, autoplay)
   end
 end
 
-function TranscriptSegment:is_on_timeline()
-  -- Validate that item and take are still valid (they become invalid if cut/pasted)
-  if not reaper.ValidatePtr2(0, self.item, 'MediaItem*') then
-    return false
+-- Static: compute clip source-time bounds from item/take.
+-- Returns (clip_start, clip_end) or (0, 0) if pointers are invalid.
+function TranscriptSegment.clip_bounds(item, take)
+  if not reaper.ValidatePtr2(0, item, 'MediaItem*') then
+    return 0, 0
   end
-  if not reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
-    return false
+  if not reaper.ValidatePtr2(0, take, 'MediaItem_Take*') then
+    return 0, 0
   end
-
-  local startoffs = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
-  local item_length = reaper.GetMediaItemInfo_Value(self.item, 'D_LENGTH')
-  local playrate = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_PLAYRATE')
-
-  -- Adjust item length for playrate to get source length
+  local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
+  local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
+  local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
   local source_length = item_length * playrate
-  local clip_end = startoffs + source_length
+  return startoffs, startoffs + source_length
+end
 
-  -- Check if segment overlaps the clipped portion of the file
-  return self.end_ > startoffs and self.start < clip_end
+function TranscriptSegment:is_on_timeline()
+  local clip_start, clip_end = TranscriptSegment.clip_bounds(self.item, self.take)
+  if clip_start == 0 and clip_end == 0 then
+    return false
+  end
+  return self.end_ > clip_start and self.start < clip_end
 end
 
 function TranscriptSegment:_clip_bounds()
-  if not reaper.ValidatePtr2(0, self.item, 'MediaItem*') then
-    return 0, 0
-  end
-  if not reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
-    return 0, 0
-  end
-  local startoffs = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
-  local item_length = reaper.GetMediaItemInfo_Value(self.item, 'D_LENGTH')
-  local playrate = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_PLAYRATE')
-  local source_length = item_length * playrate
-  return startoffs, startoffs + source_length
+  return TranscriptSegment.clip_bounds(self.item, self.take)
 end
 
 function TranscriptSegment:timeline_start_time()

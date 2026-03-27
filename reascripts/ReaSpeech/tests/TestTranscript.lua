@@ -944,6 +944,118 @@ function TestTranscript:testToTablePreservesAllSegmentsDuringSearch()
   lu.assertEquals(result.segments[2].text, "test 2")
 end
 
+function TestTranscript:testClipBoundsStatic()
+  -- TranscriptSegment.clip_bounds(item, take) should return source-time range
+  local item = 'cb_item'
+  local take = 'cb_take'
+
+  reaper.__set_item_info(item, 'D_LENGTH', 5)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 2)
+  reaper.__set_take_info(take, 'D_PLAYRATE', 1)
+
+  local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+  lu.assertAlmostEquals(clip_start, 2.0, 0.001)
+  lu.assertAlmostEquals(clip_end, 7.0, 0.001) -- 2 + 5*1
+end
+
+function TestTranscript:testClipBoundsWithPlayrate()
+  local item = 'cb_pr_item'
+  local take = 'cb_pr_take'
+
+  reaper.__set_item_info(item, 'D_LENGTH', 5)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 1)
+  reaper.__set_take_info(take, 'D_PLAYRATE', 2)
+
+  local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+  lu.assertAlmostEquals(clip_start, 1.0, 0.001)
+  lu.assertAlmostEquals(clip_end, 11.0, 0.001) -- 1 + 5*2
+end
+
+function TestTranscript:testClipBoundsNilItem()
+  local clip_start, clip_end = TranscriptSegment.clip_bounds(nil, 'take')
+  lu.assertEquals(clip_start, 0)
+  lu.assertEquals(clip_end, 0)
+end
+
+function TestTranscript:testClipBoundsNilTake()
+  local clip_start, clip_end = TranscriptSegment.clip_bounds('item', nil)
+  lu.assertEquals(clip_start, 0)
+  lu.assertEquals(clip_end, 0)
+end
+
+function TestTranscript:testWordsToTextBasic()
+  local words = {
+    TranscriptWord.new { word = 'Hello', start = 0, end_ = 0.5, probability = 1, word_start = true },
+    TranscriptWord.new { word = 'world', start = 0.5, end_ = 1, probability = 1, word_start = true },
+  }
+  lu.assertEquals(TranscriptSegment._words_to_text(words), 'Hello world')
+end
+
+function TestTranscript:testWordsToTextNoWordStart()
+  -- Words without word_start should be concatenated without spaces
+  local words = {
+    TranscriptWord.new { word = 'un', start = 0, end_ = 0.3, probability = 1, word_start = true },
+    TranscriptWord.new { word = 'break', start = 0.3, end_ = 0.6, probability = 1 },
+    TranscriptWord.new { word = 'able', start = 0.6, end_ = 1, probability = 1 },
+  }
+  lu.assertEquals(TranscriptSegment._words_to_text(words), 'unbreakable')
+end
+
+function TestTranscript:testWordsToTextEmpty()
+  lu.assertEquals(TranscriptSegment._words_to_text({}), '')
+end
+
+function TestTranscript:testWordsToTextSingleWord()
+  local words = {
+    TranscriptWord.new { word = 'Hi', start = 0, end_ = 0.5, probability = 1, word_start = true },
+  }
+  lu.assertEquals(TranscriptSegment._words_to_text(words), 'Hi')
+end
+
+function TestTranscript:testIsOnTimelineUsesClipBounds()
+  -- Segment within clip bounds should be on timeline
+  local item = 'iot_item'
+  local take = 'iot_take'
+
+  reaper.__set_item_info(item, 'D_LENGTH', 10)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 0)
+  reaper.__set_take_info(take, 'D_PLAYRATE', 1)
+
+  local s = self.segment {
+    id = 1, start = 2.0, end_ = 5.0, text = "within clip",
+    item = item, take = take,
+  }
+  lu.assertTrue(s:is_on_timeline())
+
+  -- Segment entirely outside clip bounds
+  reaper.__set_item_info(item, 'D_LENGTH', 3)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 10)
+  -- clip covers source time 10-13, segment is 2-5
+  local s2 = self.segment {
+    id = 2, start = 2.0, end_ = 5.0, text = "outside clip",
+    item = item, take = take,
+  }
+  lu.assertFalse(s2:is_on_timeline())
+end
+
+function TestTranscript:testSortCopiesWithoutUnpackLimit()
+  -- Regression test: sort should work with more than 200 segments
+  -- (table.unpack has a ~200 element limit in some Lua versions)
+  local t = Transcript.new()
+  for i = 1, 250 do
+    t:add_segment(self.segment {
+      id = i,
+      start = 250 - i,
+      end_ = 251 - i,
+      text = "segment " .. i,
+    })
+  end
+  t:sort()
+  -- After sort, segments should be in ascending start order
+  lu.assertAlmostEquals(t.data[1]:get('start'), 0.0, 0.001)
+  lu.assertAlmostEquals(t.data[250]:get('start'), 249.0, 0.001)
+end
+
 --
 
 os.exit(lu.LuaUnit.run())
