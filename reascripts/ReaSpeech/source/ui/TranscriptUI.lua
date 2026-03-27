@@ -546,9 +546,9 @@ function TranscriptUI:collect_editor_files()
 end
 
 function TranscriptUI:sync_editor_with_timeline(state)
-  -- Throttle: only check every 0.5 seconds
+  -- Throttle: only check every 1.0 second
   local now = reaper.time_precise()
-  if state._last_sync_time and now - state._last_sync_time < 0.5 then
+  if state._last_sync_time and now - state._last_sync_time < 1.0 then
     return
   end
   state._last_sync_time = now
@@ -600,7 +600,9 @@ function TranscriptUI:sync_editor_with_timeline(state)
       changed = true
     end
   end
-
+  if changed then
+    state._layout_dirty = true
+  end
 end
 
 function TranscriptUI:init_editor_for_file(source_path)
@@ -614,6 +616,8 @@ function TranscriptUI:init_editor_for_file(source_path)
     _playing_word_idx = nil,
     _editing_speaker = nil,
     _last_sync_time = nil,
+    _layout_dirty = true,
+    _word_positions = {},
   }
 
   local seg_idx = 0
@@ -708,12 +712,21 @@ function TranscriptUI:render_editor_tab(state)
 end
 
 -- Get trimmed display text for a word (parakeet words have leading spaces)
+-- Caches result in fw._display to avoid per-frame regex.
 function TranscriptUI.word_display_text(fw)
-  return fw.word.word:match('^%s*(.-)%s*$')
+  if not fw._display then
+    fw._display = fw.word.word:match('^%s*(.-)%s*$')
+  end
+  return fw._display
 end
 
--- Pre-compute editor track positions: word start/end times, segment times, active flags
+-- Pre-compute editor track positions: word start/end times, segment times, active flags.
+-- Cached in state._cached_layout; only recomputed when state._layout_dirty is true.
 function TranscriptUI:compute_editor_layout(state)
+  if state._cached_layout and not state._layout_dirty then
+    return state._cached_layout
+  end
+
   local editor_word_start = {}
   local editor_word_end = {}
   local editor_seg_times = {}
@@ -748,7 +761,7 @@ function TranscriptUI:compute_editor_layout(state)
     seg_order_pos[idx] = pos
   end
 
-  return {
+  state._cached_layout = {
     word_start = editor_word_start,
     word_end = editor_word_end,
     seg_times = editor_seg_times,
@@ -756,13 +769,18 @@ function TranscriptUI:compute_editor_layout(state)
     seg_order = seg_order,
     seg_order_pos = seg_order_pos,
   }
+  state._layout_dirty = false
+  return state._cached_layout
 end
 
 -- Render segment header: speaker label, move arrows, timestamp
 function TranscriptUI:render_segment_header(state, fw, layout, padding_x, line_y)
   local seg_pos = layout.seg_order_pos[fw.seg_idx]
   local arrow_x = padding_x
-  local arrow_w = ImGui.CalcTextSize(Ctx(), 'W')
+  if not self._cached_char_w then
+    self._cached_char_w = ImGui.CalcTextSize(Ctx(), 'W')
+  end
+  local arrow_w = self._cached_char_w
   if layout.seg_has_active[fw.seg_idx] then
     if seg_pos then
       ImGui.SetCursorPos(Ctx(), arrow_x, line_y)
@@ -831,7 +849,7 @@ function TranscriptUI:handle_editor_mouse(state, i, rx, rx2, mouse_down)
 end
 
 function TranscriptUI:render_editor_document(state)
-  state._word_positions = {}
+  if not state._word_positions then state._word_positions = {} end
   local margin = self.EDITOR_MARGIN
   local padding_x = ImGui.GetStyleVar(Ctx(), ImGui.StyleVar_WindowPadding())
   local scrollbar_w = ImGui.GetStyleVar(Ctx(), ImGui.StyleVar_ScrollbarSize())
@@ -865,7 +883,10 @@ function TranscriptUI:render_editor_document(state)
 
   for i, fw in ipairs(state._flat_words) do
     local display = self.word_display_text(fw)
-    local word_w  = ImGui.CalcTextSize(Ctx(), display)
+    if not fw._display_w then
+      fw._display_w = ImGui.CalcTextSize(Ctx(), display)
+    end
+    local word_w  = fw._display_w
     local is_word_start = fw.word.word_start ~= false
     local gap_w   = is_word_start and space_w or 0
 
@@ -897,7 +918,12 @@ function TranscriptUI:render_editor_document(state)
       end
     end
 
-    state._word_positions[i] = { x = cur_x, y = line_y, w = word_w }
+    local pos = state._word_positions[i]
+    if pos then
+      pos.x, pos.y, pos.w = cur_x, line_y, word_w
+    else
+      state._word_positions[i] = { x = cur_x, y = line_y, w = word_w }
+    end
 
     ImGui.SetCursorPos(Ctx(), cur_x, line_y)
     local is_removed = not fw_is_active(fw)
@@ -1179,6 +1205,7 @@ function TranscriptUI:handle_editor_keys(state)
       state._cursor = sel_min - 1
       state._sel_anchor = nil
       state._cursor_changed_time = reaper.time_precise()
+      state._layout_dirty = true
       self:apply_editor_to_timeline(state)
     else
       -- No selection: try merging segments at cursor boundary
@@ -1286,6 +1313,7 @@ function TranscriptUI:split_segment_at_cursor(state)
   end
 
   state._cursor_changed_time = reaper.time_precise()
+  state._layout_dirty = true
   self:apply_editor_to_timeline(state)
 end
 
@@ -1325,6 +1353,7 @@ function TranscriptUI:merge_segments_at_cursor(state)
   end
 
   state._cursor_changed_time = reaper.time_precise()
+  state._layout_dirty = true
   self:apply_editor_to_timeline(state)
 end
 
@@ -1419,6 +1448,7 @@ function TranscriptUI:move_segment_by_idx(state, seg_idx, direction)
 
   -- Replace flat_words
   state._flat_words = new_words
+  state._layout_dirty = true
 
   -- Adjust cursor to follow the moved segment
   local tgt_size = tgt_last - tgt_first + 1
