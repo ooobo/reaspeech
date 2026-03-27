@@ -712,10 +712,11 @@ function TranscriptUI:render_editor_tab(state)
 end
 
 -- Get trimmed display text for a word (parakeet words have leading spaces)
--- Caches result in fw._display to avoid per-frame regex.
+-- Caches result in fw._display and fw._display_lower to avoid per-frame work.
 function TranscriptUI.word_display_text(fw)
   if not fw._display then
     fw._display = fw.word.word:match('^%s*(.-)%s*$')
+    fw._display_lower = fw._display:lower()
   end
   return fw._display
 end
@@ -761,10 +762,17 @@ function TranscriptUI:compute_editor_layout(state)
     seg_order_pos[idx] = pos
   end
 
+  -- Pre-format timestamps for segment headers
+  local seg_times_fmt = {}
+  for seg, t in pairs(editor_seg_times) do
+    seg_times_fmt[seg] = TranscriptUI.format_timestr(t)
+  end
+
   state._cached_layout = {
     word_start = editor_word_start,
     word_end = editor_word_end,
     seg_times = editor_seg_times,
+    seg_times_fmt = seg_times_fmt,
     seg_has_active = seg_has_active,
     seg_order = seg_order,
     seg_order_pos = seg_order_pos,
@@ -805,7 +813,7 @@ function TranscriptUI:render_segment_header(state, fw, layout, padding_x, line_y
       end
     end
 
-    local ts = TranscriptUI.format_timestr(layout.seg_times[fw.seg_idx] or 0)
+    local ts = layout.seg_times_fmt[fw.seg_idx] or '0:00.00'
     ImGui.SetCursorPos(Ctx(), arrow_x + arrow_w * 2 + 4, line_y)
     ImGui.TextColored(Ctx(), 0xffffffaa, ts)
     if ImGui.IsItemHovered(Ctx()) then
@@ -862,7 +870,10 @@ function TranscriptUI:render_editor_document(state)
 
   local line_y  = ImGui.GetCursorPosY(Ctx())
   local line_h  = ImGui.GetTextLineHeightWithSpacing(Ctx())
-  local space_w = ImGui.CalcTextSize(Ctx(), ' ')
+  if not self._cached_space_w then
+    self._cached_space_w = ImGui.CalcTextSize(Ctx(), ' ')
+  end
+  local space_w = self._cached_space_w
   local cur_x   = margin
 
   local layout = self:compute_editor_layout(state)
@@ -881,6 +892,12 @@ function TranscriptUI:render_editor_document(state)
 
   local mouse_down = ImGui.IsMouseDown and ImGui.IsMouseDown(Ctx(), 0) or false
 
+  -- Viewport culling: only render ImGui elements for visible words
+  local scroll_y = ImGui.GetScrollY(Ctx())
+  local win_h = ImGui.GetWindowHeight(Ctx())
+  local vis_top = scroll_y - line_h * 2  -- small margin above
+  local vis_bot = scroll_y + win_h + line_h * 2  -- small margin below
+
   for i, fw in ipairs(state._flat_words) do
     local display = self.word_display_text(fw)
     if not fw._display_w then
@@ -896,17 +913,24 @@ function TranscriptUI:render_editor_document(state)
       end
 
       local speaker = tostring(fw.segment:get('speaker', '') or '')
+      local visible = line_y >= vis_top and line_y <= vis_bot
       if speaker ~= '' and speaker ~= prev_speaker then
-        self:render_editor_speaker(state, fw.seg_idx, speaker, padding_x, line_y)
+        if visible then
+          self:render_editor_speaker(state, fw.seg_idx, speaker, padding_x, line_y)
+        end
         line_y = line_y + line_h
         prev_speaker = speaker
       elseif not prev_seg_idx and speaker == '' then
-        ImGui.SetCursorPos(Ctx(), padding_x, line_y)
-        ImGui.TextDisabled(Ctx(), "Turn 'Identify speakers' on in settings to see speaker names, and process again.")
+        if visible then
+          ImGui.SetCursorPos(Ctx(), padding_x, line_y)
+          ImGui.TextDisabled(Ctx(), "Turn 'Identify speakers' on in settings to see speaker names, and process again.")
+        end
         line_y = line_y + line_h
       end
 
-      self:render_segment_header(state, fw, layout, padding_x, line_y)
+      if visible or (line_y >= vis_top and line_y <= vis_bot) then
+        self:render_segment_header(state, fw, layout, padding_x, line_y)
+      end
       cur_x = margin
       prev_seg_idx = fw.seg_idx
     else
@@ -925,60 +949,75 @@ function TranscriptUI:render_editor_document(state)
       state._word_positions[i] = { x = cur_x, y = line_y, w = word_w }
     end
 
-    ImGui.SetCursorPos(Ctx(), cur_x, line_y)
-    local is_removed = not fw_is_active(fw)
-    if is_removed then
-      ImGui.TextColored(Ctx(), self.EDITOR_DELETED_COLOR, display)
-      local rx, ry = ImGui.GetItemRectMin(Ctx())
-      local rx2 = select(1, ImGui.GetItemRectMax(Ctx()))
-      local rh = select(2, ImGui.GetItemRectSize(Ctx()))
-      ImGui.DrawList_AddLine(draw_list, rx, ry + rh / 2, rx2, ry + rh / 2,
-        self.EDITOR_DELETED_COLOR, 1.0)
+    -- Skip ImGui rendering for offscreen words (layout is still computed above)
+    local in_view = line_y >= vis_top and line_y <= vis_bot
+    if in_view then
+      ImGui.SetCursorPos(Ctx(), cur_x, line_y)
+      local is_removed = not fw_is_active(fw)
+      if is_removed then
+        ImGui.TextColored(Ctx(), self.EDITOR_DELETED_COLOR, display)
+        local rx, ry = ImGui.GetItemRectMin(Ctx())
+        local rx2 = select(1, ImGui.GetItemRectMax(Ctx()))
+        local rh = select(2, ImGui.GetItemRectSize(Ctx()))
+        ImGui.DrawList_AddLine(draw_list, rx, ry + rh / 2, rx2, ry + rh / 2,
+          self.EDITOR_DELETED_COLOR, 1.0)
+      else
+        ImGui.Text(Ctx(), display)
+      end
+
+      local rx, ry   = ImGui.GetItemRectMin(Ctx())
+      local rx2, ry2 = ImGui.GetItemRectMax(Ctx())
+      local is_hovered = ImGui.IsItemHovered(Ctx())
+
+      -- Word highlight overlays
+      local ws = layout.word_start[i]
+      local is_playing = play_pos and ws and play_pos >= ws and play_pos < layout.word_end[i]
+      local is_search  = not is_playing and search_pat
+                         and fw._display_lower:find(search_pat, 1, true)
+      local is_sel     = not is_playing and not is_search
+                         and sel_min and i >= sel_min and i <= sel_max
+
+      if is_playing then
+        ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_PLAYING_COLOR)
+      elseif is_search then
+        ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_SEARCH_COLOR)
+      elseif is_sel then
+        ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_SELECTION_COLOR)
+      elseif is_hovered then
+        ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_HOVER_COLOR)
+      end
+
+      if is_playing and state._playing_word_idx ~= i then
+        state._playing_word_idx = i
+        ImGui.SetScrollHereY(Ctx(), 0.35)
+      end
+
+      if state._cursor == i - 1 then
+        caret_x, caret_y1, caret_y2 = rx - 1, ry, ry2
+        state._caret_local_y = line_y
+      end
+      if state._cursor == i then
+        caret_x, caret_y1, caret_y2 = rx2 + 1, ry, ry2
+        state._caret_local_y = line_y
+      end
+
+      if is_hovered then
+        self:handle_editor_mouse(state, i, rx, rx2, mouse_down)
+      end
     else
-      ImGui.Text(Ctx(), display)
+      -- Offscreen: still track caret position for scroll-into-view
+      if state._cursor == i - 1 or state._cursor == i then
+        state._caret_local_y = line_y
+      end
     end
 
     cur_x = cur_x + word_w
-
-    local rx, ry   = ImGui.GetItemRectMin(Ctx())
-    local rx2, ry2 = ImGui.GetItemRectMax(Ctx())
-    local is_hovered = ImGui.IsItemHovered(Ctx())
-
-    -- Word highlight overlays
-    local ws = layout.word_start[i]
-    local is_playing = play_pos and ws and play_pos >= ws and play_pos < layout.word_end[i]
-    local is_search  = not is_playing and search_pat and display:lower():find(search_pat, 1, true)
-    local is_sel     = not is_playing and not is_search
-                       and sel_min and i >= sel_min and i <= sel_max
-
-    if is_playing then
-      ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_PLAYING_COLOR)
-    elseif is_search then
-      ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_SEARCH_COLOR)
-    elseif is_sel then
-      ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_SELECTION_COLOR)
-    elseif is_hovered then
-      ImGui.DrawList_AddRectFilled(draw_list, rx, ry, rx2, ry2, self.EDITOR_HOVER_COLOR)
-    end
-
-    if is_playing and state._playing_word_idx ~= i then
-      state._playing_word_idx = i
-      ImGui.SetScrollHereY(Ctx(), 0.35)
-    end
-
-    if state._cursor == i - 1 then
-      caret_x, caret_y1, caret_y2 = rx - 1, ry, ry2
-      state._caret_local_y = line_y
-    end
-    if state._cursor == i then
-      caret_x, caret_y1, caret_y2 = rx2 + 1, ry, ry2
-      state._caret_local_y = line_y
-    end
-
-    if is_hovered then
-      self:handle_editor_mouse(state, i, rx, rx2, mouse_down)
-    end
   end
+
+  -- Set content extent so ImGui scrollbar covers full document height
+  -- even when bottom words are culled
+  ImGui.SetCursorPos(Ctx(), 0, line_y + line_h)
+  ImGui.Dummy(Ctx(), 0, 0)
 
   if not play_pos then state._playing_word_idx = nil end
   if not mouse_down then state._drag_anchor = nil end
