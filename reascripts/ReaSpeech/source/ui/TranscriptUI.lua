@@ -737,6 +737,8 @@ function TranscriptUI:compute_editor_layout(state)
   local seg_has_active = {}
   local ecursor = 0.0
   local cseg = nil
+  local last_active_end = nil
+  local had_inactive = false
   for idx, fw in ipairs(state._flat_words) do
     if fw.seg_idx ~= cseg then
       cseg = fw.seg_idx
@@ -744,11 +746,20 @@ function TranscriptUI:compute_editor_layout(state)
       seg_has_active[fw.seg_idx] = false
     end
     if fw_is_active(fw) then
+      -- Include gaps between consecutive active words (natural pauses)
+      -- Only skip gaps when there was an actual deletion in between
+      if last_active_end and not had_inactive and fw.word.start > last_active_end then
+        ecursor = ecursor + (fw.word.start - last_active_end)
+      end
       local dur = fw.word.end_ - fw.word.start
       editor_word_start[idx] = ecursor
       editor_word_end[idx] = ecursor + dur
       ecursor = ecursor + dur
+      last_active_end = fw.word.end_
+      had_inactive = false
       seg_has_active[fw.seg_idx] = true
+    else
+      had_inactive = true
     end
   end
 
