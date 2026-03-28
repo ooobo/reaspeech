@@ -626,9 +626,11 @@ function TranscriptUI:init_editor_for_file(source_path)
   for _, seg in ipairs(self.transcript:get_segments()) do
     local seg_path = seg.data._source_path or ''
     if seg_path == source_path then
-      -- Combine consecutive segments with the same speaker into one editor segment
+      -- Combine consecutive segments with the same speaker into one editor segment,
+      -- unless the segment has an editor_break flag (user explicitly split it)
       local speaker = tostring(seg:get('speaker', '') or '')
-      if speaker ~= prev_speaker or seg_idx == 0 then
+      local has_break = seg.data.editor_break
+      if speaker ~= prev_speaker or seg_idx == 0 or has_break then
         seg_idx = seg_idx + 1
         prev_speaker = speaker
         word_idx_in_seg = 0
@@ -914,18 +916,12 @@ function TranscriptUI:render_editor_document(state)
 
       local speaker = tostring(fw.segment:get('speaker', '') or '')
       local visible = line_y >= vis_top and line_y <= vis_bot
-      if speaker ~= '' and speaker ~= prev_speaker then
+      if speaker ~= prev_speaker or speaker == '' then
         if visible then
           self:render_editor_speaker(state, fw.seg_idx, speaker, padding_x, line_y)
         end
         line_y = line_y + line_h
         prev_speaker = speaker
-      elseif not prev_seg_idx and speaker == '' then
-        if visible then
-          ImGui.SetCursorPos(Ctx(), padding_x, line_y)
-          ImGui.TextDisabled(Ctx(), "Turn 'Identify speakers' on in settings to see speaker names, and process again.")
-        end
-        line_y = line_y + line_h
       end
 
       if visible or (line_y >= vis_top and line_y <= vis_bot) then
@@ -1057,7 +1053,7 @@ function TranscriptUI:render_editor_speaker(state, seg_idx, speaker, x, y)
       ImGui.InputTextFlags_EnterReturnsTrue() | ImGui.InputTextFlags_AutoSelectAll())
     ImGui.PopItemWidth(Ctx())
     if rv then
-      self:commit_speaker_edit(editing.original, new_val)
+      self:commit_speaker_edit(state, seg_idx, new_val)
       state._editing_speaker = nil
     elseif ImGui.IsKeyPressed(Ctx(), ImGui.Key_Escape()) then
       state._editing_speaker = nil
@@ -1067,35 +1063,56 @@ function TranscriptUI:render_editor_speaker(state, seg_idx, speaker, x, y)
   else
     -- Display mode
     ImGui.SetCursorPos(Ctx(), x, y)
-    local display_speaker = speaker
-    if display_speaker:match('^%d+$') then
-      display_speaker = 'Speaker ' .. display_speaker
-    end
-    ImGui.TextColored(Ctx(), self.EDITOR_SPEAKER_COLOR, display_speaker)
-    if ImGui.IsItemHovered(Ctx()) then
-      ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_Hand())
-      if ImGui.IsMouseDoubleClicked(Ctx(), 0) then
-        local edit_val = speaker:match('^%d+$') and ('Speaker ' .. speaker) or speaker
-        state._editing_speaker = { seg_idx = seg_idx, value = edit_val, original = speaker }
+    if speaker == '' then
+      ImGui.TextColored(Ctx(), 0xffffff44, '+ Add speaker')
+      if ImGui.IsItemHovered(Ctx()) then
+        ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_Hand())
+        if ImGui.IsMouseClicked(Ctx(), 0) then
+          state._editing_speaker = { seg_idx = seg_idx, value = '', original = '' }
+        end
+      end
+    else
+      local display_speaker = speaker
+      if display_speaker:match('^%d+$') then
+        display_speaker = 'Speaker ' .. display_speaker
+      end
+      ImGui.TextColored(Ctx(), self.EDITOR_SPEAKER_COLOR, display_speaker)
+      if ImGui.IsItemHovered(Ctx()) then
+        ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_Hand())
+        if ImGui.IsMouseDoubleClicked(Ctx(), 0) then
+          local edit_val = speaker:match('^%d+$') and ('Speaker ' .. speaker) or speaker
+          state._editing_speaker = { seg_idx = seg_idx, value = edit_val, original = speaker }
+        end
       end
     end
   end
 end
 
-function TranscriptUI:commit_speaker_edit(old_name, new_name)
-  if old_name == new_name or new_name == '' then return end
-  -- Update all segments that have the old speaker name
-  for _, seg in ipairs(self.transcript:get_segments()) do
-    if tostring(seg:get('speaker', '')) == old_name then
-      seg.data.speaker = new_name
+-- Update speaker name for all underlying segments in the given editor segment group.
+function TranscriptUI:commit_speaker_edit(state, seg_idx, new_name)
+  if new_name == '' then return end
+
+  -- Find all underlying segments referenced by flat_words in this seg_idx
+  local affected_segments = {}
+  local seen = {}
+  for _, fw in ipairs(state._flat_words) do
+    if fw.seg_idx == seg_idx and not seen[fw.segment] then
+      seen[fw.segment] = true
+      table.insert(affected_segments, fw.segment)
     end
+  end
+
+  -- Update the speaker on each affected segment
+  for _, seg in ipairs(affected_segments) do
+    seg.data.speaker = new_name
   end
   -- Also update in init_data (source of truth for serialization)
   for _, seg in ipairs(self.transcript.init_data) do
-    if tostring(seg:get('speaker', '')) == old_name then
+    if seen[seg] then
       seg.data.speaker = new_name
     end
   end
+
   -- Persist the change
   self._transcript_saved = false
   self:save_to_project()
@@ -1331,6 +1348,9 @@ function TranscriptUI:split_segment_at_cursor(state)
   -- Only split if both words are in the same segment
   if left.seg_idx ~= right.seg_idx then return end
 
+  -- Split the underlying TranscriptSegment so the change persists
+  self:split_underlying_segment(state, c)
+
   -- Find a unique seg_idx for the new segment (avoids collisions after moves)
   local max_seg = 0
   for _, fw in ipairs(state._flat_words) do
@@ -1356,6 +1376,92 @@ function TranscriptUI:split_segment_at_cursor(state)
   self:apply_editor_to_timeline(state)
 end
 
+-- Split the underlying TranscriptSegment at the cursor position so the
+-- split persists through save/load. The right half gets an editor_break
+-- flag to prevent recombination by init_editor_for_file.
+function TranscriptUI:split_underlying_segment(state, cursor_pos)
+  local left_fw = state._flat_words[cursor_pos]
+  local right_fw = state._flat_words[cursor_pos + 1]
+
+  if left_fw.segment ~= right_fw.segment then
+    -- Words are in different underlying segments that were combined by speaker.
+    -- Mark the right segment with editor_break to prevent recombination.
+    right_fw.segment.data.editor_break = true
+    self._transcript_saved = false
+    self:save_to_project()
+    return
+  end
+
+  -- Same underlying segment — need to actually split it
+  local seg = left_fw.segment
+  if not seg.words or #seg.words == 0 then return end
+
+  -- Find the split point in the segment's word array
+  local split_after = nil
+  for wi, w in ipairs(seg.words) do
+    if w == right_fw.word then
+      split_after = wi - 1
+      break
+    end
+  end
+  if not split_after or split_after < 1 then return end
+
+  -- Split words
+  local left_words = {}
+  local right_words = {}
+  for wi, w in ipairs(seg.words) do
+    if wi <= split_after then
+      table.insert(left_words, w)
+    else
+      table.insert(right_words, w)
+    end
+  end
+
+  -- Create new segment for the right half
+  local new_data = TranscriptSegment._copy(seg.data)
+  new_data.start = right_words[1].start
+  new_data['end'] = right_words[#right_words].end_
+  new_data.text = TranscriptSegment._words_to_text(right_words)
+  new_data.editor_break = true
+
+  local new_seg = TranscriptSegment.new {
+    data = new_data,
+    item = seg.item,
+    take = seg.take,
+    words = right_words,
+  }
+
+  -- Update original segment to only have left words
+  seg.words = left_words
+  seg.data['end'] = left_words[#left_words].end_
+  seg:update_text()
+
+  -- Insert new segment into init_data right after the original
+  local insert_pos = nil
+  for i, s in ipairs(self.transcript.init_data) do
+    if s == seg then
+      insert_pos = i + 1
+      break
+    end
+  end
+  if insert_pos then
+    table.insert(self.transcript.init_data, insert_pos, new_seg)
+  end
+
+  -- Update flat_words references: right-side words now point to new segment
+  for j = cursor_pos + 1, #state._flat_words do
+    if state._flat_words[j].segment == seg then
+      state._flat_words[j].segment = new_seg
+    else
+      break
+    end
+  end
+
+  self.transcript:update()
+  self._transcript_saved = false
+  self:save_to_project()
+end
+
 function TranscriptUI:merge_segments_at_cursor(state)
   local c = state._cursor
   if c < 1 or c >= #state._flat_words then return end
@@ -1370,6 +1476,9 @@ function TranscriptUI:merge_segments_at_cursor(state)
   local left_speaker = tostring(left.segment:get('speaker', '') or '')
   local right_speaker = tostring(right.segment:get('speaker', '') or '')
   if left_speaker ~= right_speaker then return end
+
+  -- Clear editor_break on the right segment so it recombines on reopen
+  right.segment.data.editor_break = nil
 
   -- Merge: assign the right segment's words to the left segment's seg_idx
   local old_seg = right.seg_idx
@@ -1393,6 +1502,8 @@ function TranscriptUI:merge_segments_at_cursor(state)
 
   state._cursor_changed_time = reaper.time_precise()
   state._layout_dirty = true
+  self._transcript_saved = false
+  self:save_to_project()
   self:apply_editor_to_timeline(state)
 end
 
