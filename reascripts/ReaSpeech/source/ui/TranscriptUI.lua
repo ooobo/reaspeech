@@ -1412,6 +1412,11 @@ function TranscriptUI:split_segment_at_cursor(state)
   state._cursor_changed_time = reaper.time_precise()
   state._layout_dirty = true
   self:apply_editor_to_timeline(state)
+
+  -- Auto-open speaker edit on the new segment so user can assign a different speaker
+  local right_speaker = tostring(right.segment:get('speaker', '') or '')
+  local edit_val = right_speaker:match('^%d+$') and ('Speaker ' .. right_speaker) or right_speaker
+  state._editing_speaker = { seg_idx = new_seg, value = edit_val, original = right_speaker }
 end
 
 -- Split the underlying TranscriptSegment at the cursor position so the
