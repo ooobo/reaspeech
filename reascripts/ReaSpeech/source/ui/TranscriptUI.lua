@@ -1412,11 +1412,6 @@ function TranscriptUI:split_segment_at_cursor(state)
   state._cursor_changed_time = reaper.time_precise()
   state._layout_dirty = true
   self:apply_editor_to_timeline(state)
-
-  -- Auto-open speaker edit on the new segment so user can assign a different speaker
-  local right_speaker = tostring(right.segment:get('speaker', '') or '')
-  local edit_val = right_speaker:match('^%d+$') and ('Speaker ' .. right_speaker) or right_speaker
-  state._editing_speaker = { seg_idx = new_seg, value = edit_val, original = right_speaker }
 end
 
 -- Split the underlying TranscriptSegment at the cursor position so the
@@ -1430,6 +1425,7 @@ function TranscriptUI:split_underlying_segment(state, cursor_pos)
     -- Words are in different underlying segments that were combined by speaker.
     -- Mark the right segment with editor_break to prevent recombination.
     right_fw.segment.data.editor_break = true
+    right_fw.segment.data.speaker = ''  -- Clear speaker so user sees "+ Add speaker"
     self._transcript_saved = false
     self:save_to_project()
     return
@@ -1466,6 +1462,7 @@ function TranscriptUI:split_underlying_segment(state, cursor_pos)
   new_data['end'] = right_words[#right_words].end_
   new_data.text = TranscriptSegment._words_to_text(right_words)
   new_data.editor_break = true
+  new_data.speaker = ''  -- Clear speaker so user sees "+ Add speaker" link
 
   local new_seg = TranscriptSegment.new {
     data = new_data,
