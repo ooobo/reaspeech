@@ -1740,19 +1740,20 @@ function TranscriptUI:find_or_create_editor_track(source_path)
 end
 
 function TranscriptUI:apply_editor_to_timeline(state)
-  -- Build contiguous clips: only split when there's a gap from deleted words,
-  -- not at every segment/speaker boundary.
+  -- Build contiguous clips: only split when there's an actual deletion gap
+  -- (deleted/off_timeline words), not on natural pauses between words.
   local groups = {}
   local current = nil
+  local had_deletion = false
 
   for _, fw in ipairs(state._flat_words) do
     if fw_is_active(fw) then
-      -- Extend current clip if the word is contiguous (no gap from deletions)
-      if current and fw.word.start <= current.end_time + 0.01 then
+      if current and not had_deletion then
+        -- No deleted words since last active word — extend the clip
         current.end_time = math.max(current.end_time, fw.word.end_)
-        -- Update segment reference to current word's segment for source path
         current.segment = fw.segment
       else
+        -- First word, or there was a deletion gap — start new clip
         current = {
           segment = fw.segment,
           start_time = fw.word.start,
@@ -1760,8 +1761,9 @@ function TranscriptUI:apply_editor_to_timeline(state)
         }
         table.insert(groups, current)
       end
+      had_deletion = false
     else
-      current = nil
+      had_deletion = true
     end
   end
 
