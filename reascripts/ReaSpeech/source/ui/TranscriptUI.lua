@@ -931,7 +931,7 @@ function TranscriptUI:render_editor_document(state)
       cur_x = margin
       prev_seg_idx = fw.seg_idx
     else
-      if cur_x + gap_w + word_w > content_right then
+      if is_word_start and cur_x + gap_w + word_w > content_right then
         line_y = line_y + line_h
         cur_x  = margin
       else
