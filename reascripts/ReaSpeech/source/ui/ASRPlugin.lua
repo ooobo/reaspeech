@@ -12,6 +12,7 @@ function ASRPlugin:init()
   assert(self.app, 'ASRPlugin: plugin host app is required')
   Logging().init(self, 'ASRPlugin')
   self._controls = ASRControls.new(self)
+  self._actions = ASRActions.new(self)
 end
 
 function ASRPlugin:key()
