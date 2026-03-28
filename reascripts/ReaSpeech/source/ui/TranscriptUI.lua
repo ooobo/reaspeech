@@ -1099,7 +1099,8 @@ function TranscriptUI:render_editor_speaker(state, seg_idx, speaker, x, y)
       ImGui.TextColored(Ctx(), self.EDITOR_SPEAKER_COLOR, display_speaker)
       if ImGui.IsItemHovered(Ctx()) then
         ImGui.SetMouseCursor(Ctx(), ImGui.MouseCursor_Hand())
-        if ImGui.IsMouseDoubleClicked(Ctx(), 0) then
+        ImGui.SetTooltip(Ctx(), 'Click to edit speaker')
+        if ImGui.IsMouseClicked(Ctx(), 0) then
           local edit_val = speaker:match('^%d+$') and ('Speaker ' .. speaker) or speaker
           state._editing_speaker = { seg_idx = seg_idx, value = edit_val, original = speaker }
         end
