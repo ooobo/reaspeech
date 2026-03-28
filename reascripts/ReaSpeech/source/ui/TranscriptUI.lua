@@ -628,9 +628,10 @@ function TranscriptUI:init_editor_for_file(source_path)
     if seg_path == source_path then
       -- Combine consecutive segments with the same speaker into one editor segment,
       -- unless the segment has an editor_break flag (user explicitly split it)
+      -- or the speaker is empty (no diarization — preserve original boundaries)
       local speaker = tostring(seg:get('speaker', '') or '')
       local has_break = seg.data.editor_break
-      if speaker ~= prev_speaker or seg_idx == 0 or has_break then
+      if speaker ~= prev_speaker or seg_idx == 0 or has_break or speaker == '' then
         seg_idx = seg_idx + 1
         prev_speaker = speaker
         word_idx_in_seg = 0
@@ -1045,20 +1046,39 @@ function TranscriptUI:render_editor_speaker(state, seg_idx, speaker, x, y)
   speaker = tostring(speaker)
   local editing = state._editing_speaker
   if editing and editing.seg_idx == seg_idx then
-    -- Inline edit mode
+    -- Inline edit mode: text input + Change This / Change All buttons
     ImGui.SetCursorPos(Ctx(), x, y)
-    ImGui.PushItemWidth(Ctx(), 200)
-    ImGui.SetKeyboardFocusHere(Ctx())
+    ImGui.PushItemWidth(Ctx(), 150)
+    if not editing._focus_set then
+      ImGui.SetKeyboardFocusHere(Ctx())
+      editing._focus_set = true
+    end
     local rv, new_val = ImGui.InputText(Ctx(), '##speaker_edit', editing.value,
       ImGui.InputTextFlags_EnterReturnsTrue() | ImGui.InputTextFlags_AutoSelectAll())
     ImGui.PopItemWidth(Ctx())
+
     if rv then
+      -- Enter commits to this segment only
       self:commit_speaker_edit(state, seg_idx, new_val)
-      state._editing_speaker = nil
-    elseif ImGui.IsKeyPressed(Ctx(), ImGui.Key_Escape()) then
       state._editing_speaker = nil
     else
       editing.value = new_val
+      ImGui.SameLine(Ctx())
+      if ImGui.SmallButton(Ctx(), 'This') then
+        self:commit_speaker_edit(state, seg_idx, editing.value)
+        state._editing_speaker = nil
+      end
+      if editing.original ~= '' then
+        ImGui.SameLine(Ctx())
+        if ImGui.SmallButton(Ctx(), 'All') then
+          self:commit_speaker_edit_global(editing.original, editing.value)
+          state._editing_speaker = nil
+        end
+      end
+      ImGui.SameLine(Ctx())
+      if ImGui.SmallButton(Ctx(), 'X') or ImGui.IsKeyPressed(Ctx(), ImGui.Key_Escape()) then
+        state._editing_speaker = nil
+      end
     end
   else
     -- Display mode
@@ -1114,6 +1134,23 @@ function TranscriptUI:commit_speaker_edit(state, seg_idx, new_name)
   end
 
   -- Persist the change
+  self._transcript_saved = false
+  self:save_to_project()
+end
+
+-- Rename a speaker globally across all segments in the transcript.
+function TranscriptUI:commit_speaker_edit_global(old_name, new_name)
+  if new_name == '' or old_name == new_name then return end
+  for _, seg in ipairs(self.transcript:get_segments()) do
+    if tostring(seg:get('speaker', '')) == old_name then
+      seg.data.speaker = new_name
+    end
+  end
+  for _, seg in ipairs(self.transcript.init_data) do
+    if tostring(seg:get('speaker', '')) == old_name then
+      seg.data.speaker = new_name
+    end
+  end
   self._transcript_saved = false
   self:save_to_project()
 end
@@ -1472,10 +1509,9 @@ function TranscriptUI:merge_segments_at_cursor(state)
   -- Only merge if cursor is at a segment boundary
   if left.seg_idx == right.seg_idx then return end
 
-  -- Don't merge segments with different speakers
+  -- Adopt the left segment's speaker for the right segment's underlying data
   local left_speaker = tostring(left.segment:get('speaker', '') or '')
-  local right_speaker = tostring(right.segment:get('speaker', '') or '')
-  if left_speaker ~= right_speaker then return end
+  right.segment.data.speaker = left_speaker
 
   -- Clear editor_break on the right segment so it recombines on reopen
   right.segment.data.editor_break = nil
