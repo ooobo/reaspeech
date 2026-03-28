@@ -1053,32 +1053,32 @@ function TranscriptUI:render_editor_speaker(state, seg_idx, speaker, x, y)
       ImGui.SetKeyboardFocusHere(Ctx())
       editing._focus_set = true
     end
-    local rv, new_val = ImGui.InputText(Ctx(), '##speaker_edit', editing.value,
-      ImGui.InputTextFlags_EnterReturnsTrue() | ImGui.InputTextFlags_AutoSelectAll())
+    local _, new_val = ImGui.InputText(Ctx(), '##speaker_edit', editing.value,
+      ImGui.InputTextFlags_AutoSelectAll())
     ImGui.PopItemWidth(Ctx())
+    editing.value = new_val
 
-    if rv then
-      -- Enter commits to this segment only
-      self:commit_speaker_edit(state, seg_idx, new_val)
-      state._editing_speaker = nil
-    else
-      editing.value = new_val
-      ImGui.SameLine(Ctx())
-      if ImGui.SmallButton(Ctx(), 'This') then
+    local enter = ImGui.IsKeyPressed(Ctx(), ImGui.Key_Enter())
+                  or ImGui.IsKeyPressed(Ctx(), ImGui.Key_KeypadEnter())
+    local escape = ImGui.IsKeyPressed(Ctx(), ImGui.Key_Escape())
+
+    ImGui.SameLine(Ctx())
+    Fonts.wrap(Ctx(), Fonts.small, function()
+      if ImGui.SmallButton(Ctx(), 'Change This') or enter then
         self:commit_speaker_edit(state, seg_idx, editing.value)
         state._editing_speaker = nil
       end
       if editing.original ~= '' then
         ImGui.SameLine(Ctx())
-        if ImGui.SmallButton(Ctx(), 'All') then
+        if ImGui.SmallButton(Ctx(), 'Change All') then
           self:commit_speaker_edit_global(editing.original, editing.value)
           state._editing_speaker = nil
         end
       end
-      ImGui.SameLine(Ctx())
-      if ImGui.SmallButton(Ctx(), 'X') or ImGui.IsKeyPressed(Ctx(), ImGui.Key_Escape()) then
-        state._editing_speaker = nil
-      end
+    end, Trap)
+
+    if escape then
+      state._editing_speaker = nil
     end
   else
     -- Display mode
