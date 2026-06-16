@@ -1181,4 +1181,47 @@ function TestTranscript:testResolveTimelineSortsByTimelinePosition()
   lu.assertAlmostEquals(t.data[2]:get('start'), 111.0, 0.001)
 end
 
+function TestTranscript:testUpdatePreservesActiveSort()
+  -- Regression: clicking Refresh (which calls update()) must keep the active sort
+  -- instead of dropping back to source/insertion order.
+  configure_two_clips()
+  local t = Transcript.new()
+  -- Insertion order is clip A then clip B.
+  t:add_segment(self.segment {
+    id = 1, start = 1.0, end_ = 2.0, text = "clip A",
+    words = { self.word { word = "A", start = 1.0, end_ = 2.0, probability = 1.0 } },
+  })
+  t:add_segment(self.segment {
+    id = 2, start = 21.0, end_ = 22.0, text = "clip B",
+    words = { self.word { word = "B", start = 21.0, end_ = 22.0, probability = 1.0 } },
+  })
+  t:update()
+  t:sort('start', false)  -- descending: clip B (111) before clip A (101)
+  lu.assertEquals(t.data[1]:get('text'), "clip B")
+
+  -- A subsequent update() (e.g. Refresh) must preserve the descending sort.
+  t:update()
+  lu.assertEquals(t.data[1]:get('text'), "clip B")
+  lu.assertEquals(t.data[2]:get('text'), "clip A")
+end
+
+function TestTranscript:testUpdateDefaultsToStartAscending()
+  configure_two_clips()
+  local t = Transcript.new()
+  -- Insertion order is clip B then clip A (i.e. not start order).
+  t:add_segment(self.segment {
+    id = 1, start = 21.0, end_ = 22.0, text = "clip B",
+    words = { self.word { word = "B", start = 21.0, end_ = 22.0, probability = 1.0 } },
+  })
+  t:add_segment(self.segment {
+    id = 2, start = 1.0, end_ = 2.0, text = "clip A",
+    words = { self.word { word = "A", start = 1.0, end_ = 2.0, probability = 1.0 } },
+  })
+  t:update()
+  -- With no explicit sort, update() defaults to start ascending.
+  lu.assertEquals(t._sort_column, 'start')
+  lu.assertEquals(t.data[1]:get('text'), "clip A")
+  lu.assertEquals(t.data[2]:get('text'), "clip B")
+end
+
 os.exit(lu.LuaUnit.run())

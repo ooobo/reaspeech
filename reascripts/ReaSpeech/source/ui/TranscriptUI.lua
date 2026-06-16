@@ -1899,6 +1899,10 @@ function TranscriptUI:render_table()
         if default_hide then
           column_flags = column_flags | ImGui.TableColumnFlags_DefaultHide()
         end
+        if column == 'start' then
+          -- Show the sort arrow on start (ascending) by default on first load.
+          column_flags = column_flags | ImGui.TableColumnFlags_DefaultSort()
+        end
         local init_width = self.COLUMN_WIDTH
         if column == "text" or column == "file" or column == "track" then
           init_width = self.LARGE_COLUMN_WIDTH

@@ -33,6 +33,10 @@ function Transcript:clear()
   self.filtered_data = {}
   self.data = {}
   self.search = ''
+  -- Remembered sort, re-applied by update() so Refresh/search keep the active
+  -- order. Defaults to timeline start ascending (matches the default sort arrow).
+  self._sort_column = 'start'
+  self._sort_ascending = true
   -- Store raw transcription data for regeneration
   -- Format: { path = "file.wav", segments = {...} }
   self.raw_transcriptions = self.raw_transcriptions or {}
@@ -338,6 +342,9 @@ function Transcript:set_name(name)
 end
 
 function Transcript:sort(column, ascending)
+  -- Remember the active sort so update() can re-apply it (Refresh/search).
+  self._sort_column = column
+  self._sort_ascending = ascending
   local copy = {}
   for i = 1, #self.filtered_data do copy[i] = self.filtered_data[i] end
   self.data = copy
@@ -503,4 +510,9 @@ function Transcript:update()
   end
 
   self.data = self.filtered_data
+
+  -- Re-apply the active sort so Refresh/search don't drop back to source order.
+  if self._sort_column then
+    self:sort(self._sort_column, self._sort_ascending)
+  end
 end
