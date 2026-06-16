@@ -254,12 +254,19 @@ function TranscriptUI:init_layouts()
     default = 'table',
     tabs = function()
       local tabs = {{ key = 'table', label = 'Table' }}
-      for _, entry in ipairs(self._editor_file_order) do
-        table.insert(tabs, { key = 'editor:' .. entry.path, label = entry.label })
+      if self:editor_view_enabled() then
+        for _, entry in ipairs(self._editor_file_order) do
+          table.insert(tabs, { key = 'editor:' .. entry.path, label = entry.label })
+        end
       end
       return tabs
     end,
   }
+end
+
+-- The Editor view is experimental and hidden unless enabled in Settings.
+function TranscriptUI:editor_view_enabled()
+  return app and app.settings and app.settings.editor_view_enabled:get() or false
 end
 
 function TranscriptUI:drop_zones(files)
@@ -374,9 +381,10 @@ function TranscriptUI:render()
   self:render_name()
   self.actions_layout:render()
 
-  -- Rebuild file tabs when transcript changes (new files added)
+  -- Rebuild file tabs when transcript changes (new files added). Use unfiltered
+  -- init_data so searching (which filters self.data) never changes the tab set.
   if self.transcript:has_segments() then
-    local seg_count = #self.transcript:get_segments()
+    local seg_count = #self.transcript.init_data
     if seg_count ~= self._last_seg_count then
       self._last_seg_count = seg_count
       self:collect_editor_files()
@@ -386,7 +394,8 @@ function TranscriptUI:render()
   self.inner_tab_bar:render()
   self._active_inner_tab = self.inner_tab_bar:value()
 
-  if self._active_inner_tab and self._active_inner_tab:sub(1, 7) == 'editor:' then
+  if self._active_inner_tab and self._active_inner_tab:sub(1, 7) == 'editor:'
+      and self:editor_view_enabled() then
     local source_path = self._active_inner_tab:sub(8)
     local state = self._editor_states[source_path]
     if not state then
@@ -535,7 +544,7 @@ TranscriptUI.EDITOR_SPEAKER_COLOR = 0x88ccffcc  -- light blue, speaker label
 function TranscriptUI:collect_editor_files()
   self._editor_file_order = {}
   local seen = {}
-  for _, seg in ipairs(self.transcript:get_segments()) do
+  for _, seg in ipairs(self.transcript.init_data) do
     local path = seg.data._source_path or ''
     local label = seg:get('file', '')
     if path ~= '' and not seen[path] then

@@ -33,6 +33,14 @@ function ReaSpeechUI:init()
     self:log(e)
   end
 
+  -- App-wide settings (persisted globally). Lives on the always-available `app`
+  -- so both SettingsControls and TranscriptUI can reach it.
+  self.settings = {
+    editor_view_enabled = Storage.ExtState.make {
+      section = 'ReaSpeech.General', persist = true,
+    }:boolean('editor_view_enabled', false),
+  }
+
   self.requests = {}
   self.responses = {}
 
