@@ -1040,14 +1040,14 @@ function TranscriptUI:render_editor_document(state)
 
     if state._caret_local_y and state._cursor_changed_time
         and (reaper.time_precise() - state._cursor_changed_time) < 0.1 then
-      local scroll_y = ImGui.GetScrollY(Ctx())
-      local win_h = ImGui.GetWindowHeight(Ctx())
+      local cur_scroll_y = ImGui.GetScrollY(Ctx())
+      local cur_win_h = ImGui.GetWindowHeight(Ctx())
       local caret_top = state._caret_local_y
       local caret_bot = caret_top + line_h
-      if caret_top < scroll_y then
+      if caret_top < cur_scroll_y then
         ImGui.SetScrollY(Ctx(), caret_top)
-      elseif caret_bot > scroll_y + win_h then
-        ImGui.SetScrollY(Ctx(), caret_bot - win_h)
+      elseif caret_bot > cur_scroll_y + cur_win_h then
+        ImGui.SetScrollY(Ctx(), caret_bot - cur_win_h)
       end
     end
   end
@@ -1628,14 +1628,12 @@ function TranscriptUI:move_segment_by_idx(state, seg_idx, direction)
   for i = 1, block_a_first - 1 do
     new_words[#new_words + 1] = words[i]
   end
-  local swap_start = #new_words + 1
   for i = block_b_first, block_b_last do
     new_words[#new_words + 1] = words[i]
   end
   for i = block_a_last + 1, block_b_first - 1 do
     new_words[#new_words + 1] = words[i]
   end
-  local block_a_new_start = #new_words + 1
   for i = block_a_first, block_a_last do
     new_words[#new_words + 1] = words[i]
   end

@@ -995,8 +995,8 @@ function TestTranscript:testWordsToTextNoWordStart()
   -- Words without word_start should be concatenated without spaces
   local words = {
     TranscriptWord.new { word = 'un', start = 0, end_ = 0.3, probability = 1, word_start = true },
-    TranscriptWord.new { word = 'break', start = 0.3, end_ = 0.6, probability = 1 },
-    TranscriptWord.new { word = 'able', start = 0.6, end_ = 1, probability = 1 },
+    TranscriptWord.new { word = 'break', start = 0.3, end_ = 0.6, probability = 1, word_start = false },
+    TranscriptWord.new { word = 'able', start = 0.6, end_ = 1, probability = 1, word_start = false },
   }
   lu.assertEquals(TranscriptSegment._words_to_text(words), 'unbreakable')
 end
@@ -1050,7 +1050,8 @@ function TestTranscript:testSortCopiesWithoutUnpackLimit()
       text = "segment " .. i,
     })
   end
-  t:sort()
+  t:update()
+  t:sort('start', true)
   -- After sort, segments should be in ascending start order
   lu.assertAlmostEquals(t.data[1]:get('start'), 0.0, 0.001)
   lu.assertAlmostEquals(t.data[250]:get('start'), 249.0, 0.001)
