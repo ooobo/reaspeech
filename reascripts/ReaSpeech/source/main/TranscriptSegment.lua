@@ -324,6 +324,12 @@ function TranscriptSegment.clip_bounds(item, take)
   local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
   local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
   local source_length = item_length * playrate
+  -- A zero/negative playrate or length yields a degenerate (zero- or negative-
+  -- width) clip. Treat it as invalid so it can't shadow a real clip during
+  -- timeline resolution or be reported as on-timeline.
+  if not source_length or source_length <= 0 then
+    return 0, 0
+  end
   return startoffs, startoffs + source_length
 end
 
@@ -371,7 +377,7 @@ end
 -- (timeline_time, item, take) for the first clip whose source range contains `t`,
 -- or nil when `t` falls in a region not placed on the timeline.
 function TranscriptSegment.timeline_time_for(t, clips)
-  if not clips then return nil end
+  if not clips or not t then return nil end
   for _, clip in ipairs(clips) do
     if t >= clip.startoffs and t <= clip.clip_end then
       return clip.position + (t - clip.startoffs), clip.item, clip.take
@@ -406,7 +412,14 @@ function TranscriptSegment:resolve_timeline(clips)
       first_t, first_item, first_take = ts, item, take
     end
     local te = TranscriptSegment.timeline_time_for(end_t, clips)
-    if te then last_t = te end
+    if te then
+      last_t = math.max(last_t or te, te)
+    elseif ts then
+      -- The end fell off a clip (e.g. audio runs past a trimmed edge) but the
+      -- start landed on one. Fall back to the mapped start so the segment keeps
+      -- a non-zero duration instead of collapsing _tl_end onto _tl_start.
+      last_t = math.max(last_t or ts, ts)
+    end
   end
 
   if self.words and #self.words > 0 then

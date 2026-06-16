@@ -1528,6 +1528,7 @@ function TranscriptUI:merge_segments_at_cursor(state)
 
   local left = state._flat_words[c]
   local right = state._flat_words[c + 1]
+  if not (left and left.segment and right and right.segment) then return end
 
   -- Only merge if cursor is at a segment boundary
   if left.seg_idx == right.seg_idx then return end

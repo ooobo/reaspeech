@@ -90,8 +90,10 @@ function ASRPlugin:handle_response(job_count)
     for _, segment in ipairs(segments) do
       local text = (segment.text or ''):match("^%s*(.-)%s*$")
       local prev = merged[#merged]
-      -- Only merge if fragment is short AND adjacent (gap < 0.5s) to previous
-      if prev and #text <= 4 and (segment.start - prev['end']) < 0.5 then
+      -- Only merge if fragment is short AND adjacent (gap < 0.5s) to previous.
+      -- Require both timestamps so a segment missing timing can't crash the math.
+      if prev and #text <= 4 and segment.start and prev['end']
+          and (segment.start - prev['end']) < 0.5 then
         prev.text = prev.text .. ' ' .. text
         prev['end'] = segment['end']
         if prev.tokens and segment.tokens then
@@ -116,18 +118,21 @@ function ASRPlugin:handle_response(job_count)
     local seen_segments = {}
     for _, segment in ipairs(segments) do
       local text = (segment.text or ''):match("^%s*(.-)%s*$")
+      local s_start, s_end = segment.start, segment['end']
       local dominated = false
-      if seen_segments[text] then
+      if seen_segments[text] and s_start and s_end then
         for _, prev in ipairs(seen_segments[text]) do
           -- Consider it a duplicate only if the overlap is > 50% of the shorter segment
-          local overlap = math.max(0,
-            math.min(segment['end'], prev.end_time) - math.max(segment.start, prev.start_time))
-          local shorter = math.min(
-            segment['end'] - segment.start,
-            prev.end_time - prev.start_time)
-          if shorter > 0 and overlap / shorter > 0.5 then
-            dominated = true
-            break
+          if prev.start_time and prev.end_time then
+            local overlap = math.max(0,
+              math.min(s_end, prev.end_time) - math.max(s_start, prev.start_time))
+            local shorter = math.min(
+              s_end - s_start,
+              prev.end_time - prev.start_time)
+            if shorter > 0 and overlap / shorter > 0.5 then
+              dominated = true
+              break
+            end
           end
         end
       end
@@ -135,24 +140,28 @@ function ASRPlugin:handle_response(job_count)
         goto next_segment
       end
       if not seen_segments[text] then seen_segments[text] = {} end
-      table.insert(seen_segments[text], { start_time = segment.start, end_time = segment['end'] })
+      table.insert(seen_segments[text], { start_time = s_start, end_time = s_end })
 
-      -- Assign segment to the clip with the most overlap to avoid duplicates
+      -- Assign segment to the clip with the most overlap to avoid duplicates.
+      -- Without segment timing there is nothing to score, so we fall back to the
+      -- first project entry below.
       local best_entry = nil
       local best_overlap = 0
 
-      for _, project_entry in ipairs(job.project_entries) do
-        local item = project_entry.item
-        local take = project_entry.take
+      if s_start and s_end then
+        for _, project_entry in ipairs(job.project_entries) do
+          local item = project_entry.item
+          local take = project_entry.take
 
-        local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+          local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
 
-        local overlap = math.max(0,
-          math.min(segment['end'], clip_end) - math.max(segment.start, clip_start))
+          local overlap = math.max(0,
+            math.min(s_end, clip_end) - math.max(s_start, clip_start))
 
-        if overlap > best_overlap then
-          best_overlap = overlap
-          best_entry = project_entry
+          if overlap > best_overlap then
+            best_overlap = overlap
+            best_entry = project_entry
+          end
         end
       end
 

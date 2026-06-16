@@ -1224,4 +1224,81 @@ function TestTranscript:testUpdateDefaultsToStartAscending()
   lu.assertEquals(t.data[2]:get('text'), "clip B")
 end
 
+--
+-- Edge-case hardening (timeline & transcript robustness)
+--
+
+function TestTranscript:testClipBoundsZeroPlayrate()
+  -- A zero playrate yields a zero-width clip; clip_bounds must report it as
+  -- invalid (0, 0) rather than a degenerate range.
+  reaper.__set_item_info('zp_item', 'D_LENGTH', 5)
+  reaper.__set_take_info('zp_take', 'D_STARTOFFS', 2)
+  reaper.__set_take_info('zp_take', 'D_PLAYRATE', 0)
+  local clip_start, clip_end = TranscriptSegment.clip_bounds('zp_item', 'zp_take')
+  lu.assertEquals(clip_start, 0)
+  lu.assertEquals(clip_end, 0)
+end
+
+function TestTranscript:testClipBoundsNegativePlayrate()
+  -- A negative playrate would invert the clip bounds; treat it as invalid.
+  reaper.__set_item_info('np_item', 'D_LENGTH', 5)
+  reaper.__set_take_info('np_take', 'D_STARTOFFS', 2)
+  reaper.__set_take_info('np_take', 'D_PLAYRATE', -1)
+  local clip_start, clip_end = TranscriptSegment.clip_bounds('np_item', 'np_take')
+  lu.assertEquals(clip_start, 0)
+  lu.assertEquals(clip_end, 0)
+end
+
+function TestTranscript:testBuildClipIndexSkipsZeroLengthItem()
+  -- A zero-length item produces a zero-width clip whose clip_end equals its
+  -- startoffs. With startoffs > 0 the old `clip_end > 0` filter would have
+  -- accepted it; clip_bounds now returns (0, 0) so it is excluded from the index.
+  reaper.__set_item_info('zl_item', 'D_POSITION', 100)
+  reaper.__set_item_info('zl_item', 'D_LENGTH', 0)
+  reaper.__set_take_info('zl_take', 'D_STARTOFFS', 2)
+  reaper.__set_take_info('zl_take', 'D_PLAYRATE', 1)
+  reaper.CountMediaItems = function () return 1 end
+  reaper.GetMediaItem = function (_, i) return i == 0 and 'zl_item' or nil end
+  reaper.GetActiveTake = function () return 'zl_take' end
+
+  local t = Transcript.new()
+  local index = t:build_clip_index()
+  lu.assertNil(index['test_audio.wav'])
+end
+
+function TestTranscript:testResolveTimelineNilTimesNoCrash()
+  -- A segment with no words and no start/end must not crash timeline resolution
+  -- (regression: timeline_time_for compared a nil time against a number).
+  configure_two_clips()
+  local t = Transcript.new()
+  t:add_segment(self.segment {
+    id = 1, text = "no timing",
+  })
+  t:update()
+  local seg = t.data[1]
+  lu.assertNil(seg:get('start'))
+  lu.assertNil(seg:get('end'))
+end
+
+function TestTranscript:testResolveTimelineEndPastClipEdge()
+  -- The last word's start lands on clip A (source 8 -> 108) but its end runs into
+  -- the removed gap (source 12, off-timeline). The resolved end must not collapse
+  -- onto the start; it falls back to the last mapped on-clip time.
+  configure_two_clips()
+  local t = Transcript.new()
+  t:add_segment(self.segment {
+    id = 1, start = 2.0, end_ = 12.0, text = "runs past edge",
+    words = {
+      self.word { word = "on", start = 2.0, end_ = 4.0, probability = 1.0 },
+      self.word { word = "edge", start = 8.0, end_ = 12.0, probability = 1.0 },
+    },
+  })
+  t:update()
+  local seg = t.data[1]
+  -- source 2 -> 102 (first word start); source 8 -> 108 (last on-clip word start)
+  lu.assertAlmostEquals(seg:get('start'), 102.0, 0.001)
+  lu.assertAlmostEquals(seg:get('end'), 108.0, 0.001)
+  lu.assertTrue(seg:get('end') > seg:get('start'))
+end
+
 os.exit(lu.LuaUnit.run())
