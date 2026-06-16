@@ -212,10 +212,12 @@ function TranscriptSegment:get(column, default)
   elseif column == 'track' then
     return self:get_track_name() or default
   elseif column == 'start' then
-    -- Return timeline start time for consistency with UI display and sorting
+    -- Prefer word-level resolved timeline time (see resolve_timeline); fall back
+    -- to the single-clip computation when resolution hasn't run.
+    if self._tl_resolved then return self._tl_start end
     return self:timeline_start_time()
   elseif column == 'end' then
-    -- Return timeline end time for consistency with UI display and sorting
+    if self._tl_resolved then return self._tl_end end
     return self:timeline_end_time()
   elseif column == 'raw-start' then
     return self.data['start']
@@ -361,6 +363,71 @@ function TranscriptSegment:timeline_end_time()
   return reaper.GetMediaItemInfo_Value(self.item, 'D_POSITION')
     + clamped_end
     - reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
+end
+
+-- Static: map a source-file time `t` onto the timeline using a list of clips for
+-- the segment's source file. Each clip is { item, take, position, startoffs,
+-- clip_end } as produced by Transcript:build_clip_index. Returns
+-- (timeline_time, item, take) for the first clip whose source range contains `t`,
+-- or nil when `t` falls in a region not placed on the timeline.
+function TranscriptSegment.timeline_time_for(t, clips)
+  if not clips then return nil end
+  for _, clip in ipairs(clips) do
+    if t >= clip.startoffs and t <= clip.clip_end then
+      return clip.position + (t - clip.startoffs), clip.item, clip.take
+    end
+  end
+  return nil
+end
+
+-- Resolve word-accurate timeline start/end against the current clips of this
+-- segment's source file. `clips` is the per-file list from
+-- Transcript:build_clip_index (may be nil/empty). When clips are available the
+-- result is cached in _tl_start/_tl_end and a representative item/take is recorded
+-- for sorting and navigation; the segment is marked off-timeline (nil times) only
+-- when none of its audio lands on a clip. When no clips are supplied (e.g. the
+-- file isn't in the project), resolution is skipped so get() falls back to the
+-- legacy single-clip computation.
+function TranscriptSegment:resolve_timeline(clips)
+  if not clips or #clips == 0 then
+    self._tl_resolved = false
+    return
+  end
+
+  self._tl_resolved = true
+  self._tl_start = nil
+  self._tl_end = nil
+
+  local first_t, first_item, first_take, last_t
+
+  local function consider(start_t, end_t)
+    local ts, item, take = TranscriptSegment.timeline_time_for(start_t, clips)
+    if ts and not first_t then
+      first_t, first_item, first_take = ts, item, take
+    end
+    local te = TranscriptSegment.timeline_time_for(end_t, clips)
+    if te then last_t = te end
+  end
+
+  if self.words and #self.words > 0 then
+    for _, w in ipairs(self.words) do
+      consider(w.start, w.end_)
+    end
+  end
+
+  -- Fall back to the segment span when there are no words, or none landed on a clip.
+  if not first_t then
+    consider(self.start, self.end_)
+  end
+
+  if first_t then
+    self._tl_start = first_t
+    self._tl_end = math.max(last_t or first_t, first_t)
+    if first_item and first_take then
+      self.item = first_item
+      self.take = first_take
+    end
+  end
 end
 
 function TranscriptSegment:_navigate_to_media_item(item)

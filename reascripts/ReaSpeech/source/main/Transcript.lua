@@ -196,6 +196,59 @@ function Transcript:find_items_by_path(path)
   return matching_items
 end
 
+-- Build an index of every project media item keyed by its source file path.
+-- Each entry carries the timeline position and source-time bounds needed to map
+-- a source-file time onto the timeline. Returns {} when the required Reaper APIs
+-- are unavailable (e.g. in unit tests without item mocks), which makes
+-- resolve_timeline_times fall back to the legacy single-clip computation.
+function Transcript:build_clip_index()
+  local index = {}
+  if not (reaper.CountMediaItems and reaper.GetActiveTake
+      and reaper.GetMediaItemTake_Source and reaper.GetMediaSourceFileName) then
+    return index
+  end
+
+  local num_items = reaper.CountMediaItems(0)
+  for i = 0, num_items - 1 do
+    local item = reaper.GetMediaItem(0, i)
+    local take = item and reaper.GetActiveTake(item)
+    if take then
+      local source = reaper.GetMediaItemTake_Source(take)
+      if source then
+        local path = reaper.GetMediaSourceFileName(source)
+        if path and path ~= '' then
+          local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+          -- (0, 0) means invalid pointers; a real clip always has clip_end > 0.
+          if clip_end > 0 then
+            if not index[path] then index[path] = {} end
+            table.insert(index[path], {
+              item = item,
+              take = take,
+              position = reaper.GetMediaItemInfo_Value(item, 'D_POSITION'),
+              startoffs = clip_start,
+              clip_end = clip_end,
+            })
+          end
+        end
+      end
+    end
+  end
+
+  return index
+end
+
+-- Re-resolve every segment's timeline start/end against the current timeline,
+-- word by word, so segments spanning edited gaps still map to wherever their
+-- audio actually lives. Runs from update() (transcription, Refresh, search) -
+-- never per render frame.
+function Transcript:resolve_timeline_times()
+  self._clip_index = self:build_clip_index()
+  for _, segment in ipairs(self.init_data) do
+    local path = segment.data['_source_path']
+    segment:resolve_timeline(path and self._clip_index[path] or nil)
+  end
+end
+
 function Transcript:has_segments()
   return #self.init_data > 0
 end
@@ -404,6 +457,8 @@ function Transcript:update()
     self:clear()
     return
   end
+
+  self:resolve_timeline_times()
 
   local columns = self:get_columns()
 
