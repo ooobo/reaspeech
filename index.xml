@@ -10,6 +10,12 @@
   "about": "# ReaSpeech\n\nSpeech recognition tool for REAPER using Parakeet TDT ASR model.\n\nIssues? Email richardson.ross@abc.net.au"
 }]]></description>
       </metadata>
+  <version name="0.7.1-fork12" author="ooobo" time="2026-06-17T04:23:54Z">
+    <changelog><![CDATA[Release v0.7.1-fork12]]></changelog>
+    <source main="main">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork12/ReaSpeech.lua</source>
+    <source platform="windows" file="parakeet-transcribe.exe">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork12/parakeet-transcribe.exe</source>
+    <source platform="darwin" file="parakeet-transcribe-macos">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork12/parakeet-transcribe-macos</source>
+  </version>
   <version name="0.7.1-fork11" author="ooobo" time="2026-05-14T06:32:28Z">
     <changelog><![CDATA[Release v0.7.1-fork11]]></changelog>
     <source main="main">https://github.com/ooobo/reaspeech/releases/download/v0.7.1-fork11/ReaSpeech.lua</source>
