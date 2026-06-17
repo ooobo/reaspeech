@@ -64,6 +64,7 @@ function ReaSpeechControlsUI:render()
     Widgets.png('reaspeech-logo-small')
     self:render_processing_stats()
     self:render_action_buttons()
+    self:render_version()
   end)
   ImGui.EndGroup(Ctx())
 
@@ -228,6 +229,23 @@ function ReaSpeechControlsUI:render_processing_stats()
     end, Trap)
   end)
   ImGui.PopTextWrapPos(Ctx())
+end
+
+function ReaSpeechControlsUI:render_version()
+  local version = ReaSpeechUI.VERSION
+  if not version then return end
+
+  -- Prefix a "v" for proper version numbers, but leave labels
+  -- like "unknown (development)" as-is.
+  local label = version:match('^%d') and ('v' .. version) or version
+
+  ImGui.PushStyleColor(Ctx(), ImGui.Col_Text(), 0x808080ff)
+  Trap(function()
+    Fonts.wrap(Ctx(), Fonts.small, function()
+      ImGui.Text(Ctx(), label)
+    end, Trap)
+  end)
+  ImGui.PopStyleColor(Ctx())
 end
 
 function ReaSpeechControlsUI:render_action_buttons()
