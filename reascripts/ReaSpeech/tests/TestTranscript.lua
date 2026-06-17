@@ -41,6 +41,12 @@ TestTranscript = {
 
 function TestTranscript:setUp()
   reaper.__test_setUp()
+  -- Default to "no items in project" so build_clip_index yields an empty index
+  -- and segments use the legacy single-clip timeline computation. Tests that
+  -- exercise word-level resolution install their own clip enumeration.
+  reaper.CountMediaItems = function () return 0 end
+  reaper.GetMediaItem = function () return nil end
+  reaper.GetActiveTake = nil
 end
 
 function TestTranscript:make_transcript()
@@ -113,7 +119,7 @@ function TestTranscript:testColumnOrder()
     avg_logprob = 0.5
   })
   local columns = t:get_columns()
-  lu.assertEquals(columns, {"id", "start", "end", "raw-start", "raw-end", "text", "score", "file", "avg_logprob"})
+  lu.assertEquals(columns, {"id", "start", "end", "raw-start", "raw-end", "text", "score", "file", "track", "avg_logprob"})
 end
 
 function TestTranscript:testFileColumn()
@@ -652,7 +658,7 @@ end
 function TestTranscript:testMergeWords()
   local words = {
     self.word { word = "rene", start = 1.0, end_ = 1.5, probability = 1.0 },
-    self.word { word = "gade", start = 1.5, end_ = 2.0, probability = 0.5 }
+    self.word { word = "gade", start = 1.5, end_ = 2.0, probability = 0.5, word_start = false }
   }
   TranscriptSegment.merge_words(words, 1, 2)
   lu.assertEquals(#words, 1)
@@ -788,7 +794,7 @@ function TestTranscript:testSegmentToJson()
   lu.assertEquals(keys, {"end", "probability", "start", "word"})
 end
 
-function TestTranscript:TestFromJson()
+function TestTranscript:testFromJson()
   reaper.CountMediaItems = function() return 2 end
   reaper.GetMediaItem = function(_, idx)
     if idx == 0 then
@@ -944,6 +950,355 @@ function TestTranscript:testToTablePreservesAllSegmentsDuringSearch()
   lu.assertEquals(result.segments[2].text, "test 2")
 end
 
+function TestTranscript:testClipBoundsStatic()
+  -- TranscriptSegment.clip_bounds(item, take) should return source-time range
+  local item = 'cb_item'
+  local take = 'cb_take'
+
+  reaper.__set_item_info(item, 'D_LENGTH', 5)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 2)
+  reaper.__set_take_info(take, 'D_PLAYRATE', 1)
+
+  local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+  lu.assertAlmostEquals(clip_start, 2.0, 0.001)
+  lu.assertAlmostEquals(clip_end, 7.0, 0.001) -- 2 + 5*1
+end
+
+function TestTranscript:testClipBoundsWithPlayrate()
+  local item = 'cb_pr_item'
+  local take = 'cb_pr_take'
+
+  reaper.__set_item_info(item, 'D_LENGTH', 5)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 1)
+  reaper.__set_take_info(take, 'D_PLAYRATE', 2)
+
+  local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+  lu.assertAlmostEquals(clip_start, 1.0, 0.001)
+  lu.assertAlmostEquals(clip_end, 11.0, 0.001) -- 1 + 5*2
+end
+
+function TestTranscript:testClipBoundsNilItem()
+  local clip_start, clip_end = TranscriptSegment.clip_bounds(nil, 'take')
+  lu.assertEquals(clip_start, 0)
+  lu.assertEquals(clip_end, 0)
+end
+
+function TestTranscript:testClipBoundsNilTake()
+  local clip_start, clip_end = TranscriptSegment.clip_bounds('item', nil)
+  lu.assertEquals(clip_start, 0)
+  lu.assertEquals(clip_end, 0)
+end
+
+function TestTranscript:testWordsToTextBasic()
+  local words = {
+    TranscriptWord.new { word = 'Hello', start = 0, end_ = 0.5, probability = 1, word_start = true },
+    TranscriptWord.new { word = 'world', start = 0.5, end_ = 1, probability = 1, word_start = true },
+  }
+  lu.assertEquals(TranscriptSegment._words_to_text(words), 'Hello world')
+end
+
+function TestTranscript:testWordsToTextNoWordStart()
+  -- Words without word_start should be concatenated without spaces
+  local words = {
+    TranscriptWord.new { word = 'un', start = 0, end_ = 0.3, probability = 1, word_start = true },
+    TranscriptWord.new { word = 'break', start = 0.3, end_ = 0.6, probability = 1, word_start = false },
+    TranscriptWord.new { word = 'able', start = 0.6, end_ = 1, probability = 1, word_start = false },
+  }
+  lu.assertEquals(TranscriptSegment._words_to_text(words), 'unbreakable')
+end
+
+function TestTranscript:testWordsToTextEmpty()
+  lu.assertEquals(TranscriptSegment._words_to_text({}), '')
+end
+
+function TestTranscript:testWordsToTextSingleWord()
+  local words = {
+    TranscriptWord.new { word = 'Hi', start = 0, end_ = 0.5, probability = 1, word_start = true },
+  }
+  lu.assertEquals(TranscriptSegment._words_to_text(words), 'Hi')
+end
+
+function TestTranscript:testIsOnTimelineUsesClipBounds()
+  -- Segment within clip bounds should be on timeline
+  local item = 'iot_item'
+  local take = 'iot_take'
+
+  reaper.__set_item_info(item, 'D_LENGTH', 10)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 0)
+  reaper.__set_take_info(take, 'D_PLAYRATE', 1)
+
+  local s = self.segment {
+    id = 1, start = 2.0, end_ = 5.0, text = "within clip",
+    item = item, take = take,
+  }
+  lu.assertTrue(s:is_on_timeline())
+
+  -- Segment entirely outside clip bounds
+  reaper.__set_item_info(item, 'D_LENGTH', 3)
+  reaper.__set_take_info(take, 'D_STARTOFFS', 10)
+  -- clip covers source time 10-13, segment is 2-5
+  local s2 = self.segment {
+    id = 2, start = 2.0, end_ = 5.0, text = "outside clip",
+    item = item, take = take,
+  }
+  lu.assertFalse(s2:is_on_timeline())
+end
+
+function TestTranscript:testSortCopiesWithoutUnpackLimit()
+  -- Regression test: sort should work with more than 200 segments
+  -- (table.unpack has a ~200 element limit in some Lua versions)
+  local t = Transcript.new()
+  for i = 1, 250 do
+    t:add_segment(self.segment {
+      id = i,
+      start = 250 - i,
+      end_ = 251 - i,
+      text = "segment " .. i,
+    })
+  end
+  t:update()
+  t:sort('start', true)
+  -- After sort, segments should be in ascending start order
+  lu.assertAlmostEquals(t.data[1]:get('start'), 0.0, 0.001)
+  lu.assertAlmostEquals(t.data[250]:get('start'), 249.0, 0.001)
+end
+
 --
+-- Word-level timeline resolution (Transcript:resolve_timeline_times)
+--
+-- Two clips of the same source file on the timeline, with a removed gap between
+-- them in source coordinates:
+--   clip A: source [0, 10]  -> timeline position 100  (so source t -> 100 + t)
+--   gap:    source (10, 20) is not on the timeline
+--   clip B: source [20, 30] -> timeline position 110  (so source t -> 90 + t)
+
+local function configure_two_clips()
+  local itemA, takeA = 'clipA_item', 'clipA_take'
+  local itemB, takeB = 'clipB_item', 'clipB_take'
+
+  reaper.__set_item_info(itemA, 'D_POSITION', 100)
+  reaper.__set_item_info(itemA, 'D_LENGTH', 10)
+  reaper.__set_take_info(takeA, 'D_STARTOFFS', 0)
+
+  reaper.__set_item_info(itemB, 'D_POSITION', 110)
+  reaper.__set_item_info(itemB, 'D_LENGTH', 10)
+  reaper.__set_take_info(takeB, 'D_STARTOFFS', 20)
+
+  local items = { [0] = itemA, [1] = itemB }
+  local active_take = { [itemA] = takeA, [itemB] = takeB }
+
+  reaper.CountMediaItems = function () return 2 end
+  reaper.GetMediaItem = function (_, i) return items[i] end
+  reaper.GetActiveTake = function (item) return active_take[item] end
+  -- All clips reference the same source file (matches the global stubs above).
+end
+
+function TestTranscript:testResolveTimelineWithinClip()
+  configure_two_clips()
+  local t = Transcript.new()
+  t:add_segment(self.segment {
+    id = 1, start = 21.0, end_ = 23.0, text = "inside clip B",
+    words = {
+      self.word { word = "inside", start = 21.0, end_ = 22.0, probability = 1.0 },
+      self.word { word = "B", start = 22.0, end_ = 23.0, probability = 1.0 },
+    },
+  })
+  t:update()
+  local seg = t.data[1]
+  -- source 21 -> 90 + 21 = 111 ; source 23 -> 90 + 23 = 113
+  lu.assertAlmostEquals(seg:get('start'), 111.0, 0.001)
+  lu.assertAlmostEquals(seg:get('end'), 113.0, 0.001)
+end
+
+function TestTranscript:testResolveTimelineSpanningGap()
+  -- First word lands in the removed gap; a later word is on clip B. The segment
+  -- must still resolve (regression: previously rendered "-" for the whole row).
+  configure_two_clips()
+  local t = Transcript.new()
+  t:add_segment(self.segment {
+    id = 1, start = 12.0, end_ = 22.0, text = "spans gap",
+    words = {
+      self.word { word = "gap", start = 12.0, end_ = 13.0, probability = 1.0 },
+      self.word { word = "onclip", start = 21.0, end_ = 22.0, probability = 1.0 },
+    },
+  })
+  t:update()
+  local seg = t.data[1]
+  -- start from the first on-timeline word (source 21 -> 111), end from its end (22 -> 112)
+  lu.assertAlmostEquals(seg:get('start'), 111.0, 0.001)
+  lu.assertAlmostEquals(seg:get('end'), 112.0, 0.001)
+end
+
+function TestTranscript:testResolveTimelineFullyOffTimeline()
+  -- All audio is in the removed gap -> no timeline position -> nil (renders "-").
+  configure_two_clips()
+  local t = Transcript.new()
+  t:add_segment(self.segment {
+    id = 1, start = 12.0, end_ = 15.0, text = "removed",
+    words = {
+      self.word { word = "removed", start = 12.0, end_ = 13.0, probability = 1.0 },
+      self.word { word = "audio", start = 14.0, end_ = 15.0, probability = 1.0 },
+    },
+  })
+  t:update()
+  local seg = t.data[1]
+  lu.assertNil(seg:get('start'))
+  lu.assertNil(seg:get('end'))
+end
+
+function TestTranscript:testResolveTimelineNoWordsFallsBackToSpan()
+  -- Segments without word timing fall back to the segment span endpoints.
+  configure_two_clips()
+  local t = Transcript.new()
+  t:add_segment(self.segment {
+    id = 1, start = 2.0, end_ = 5.0, text = "no words, clip A",
+  })
+  t:update()
+  local seg = t.data[1]
+  -- source 2 -> 100 + 2 = 102 ; source 5 -> 105
+  lu.assertAlmostEquals(seg:get('start'), 102.0, 0.001)
+  lu.assertAlmostEquals(seg:get('end'), 105.0, 0.001)
+end
+
+function TestTranscript:testResolveTimelineSortsByTimelinePosition()
+  configure_two_clips()
+  local t = Transcript.new()
+  -- Added out of timeline order: clip B segment first, clip A segment second.
+  t:add_segment(self.segment {
+    id = 1, start = 21.0, end_ = 22.0, text = "later (clip B)",
+    words = { self.word { word = "later", start = 21.0, end_ = 22.0, probability = 1.0 } },
+  })
+  t:add_segment(self.segment {
+    id = 2, start = 1.0, end_ = 2.0, text = "earlier (clip A)",
+    words = { self.word { word = "earlier", start = 1.0, end_ = 2.0, probability = 1.0 } },
+  })
+  t:update()
+  t:sort('start', true)
+  -- clip A segment (timeline 101) should sort before clip B segment (timeline 111)
+  lu.assertEquals(t.data[1]:get('text'), "earlier (clip A)")
+  lu.assertAlmostEquals(t.data[1]:get('start'), 101.0, 0.001)
+  lu.assertEquals(t.data[2]:get('text'), "later (clip B)")
+  lu.assertAlmostEquals(t.data[2]:get('start'), 111.0, 0.001)
+end
+
+function TestTranscript:testUpdatePreservesActiveSort()
+  -- Regression: clicking Refresh (which calls update()) must keep the active sort
+  -- instead of dropping back to source/insertion order.
+  configure_two_clips()
+  local t = Transcript.new()
+  -- Insertion order is clip A then clip B.
+  t:add_segment(self.segment {
+    id = 1, start = 1.0, end_ = 2.0, text = "clip A",
+    words = { self.word { word = "A", start = 1.0, end_ = 2.0, probability = 1.0 } },
+  })
+  t:add_segment(self.segment {
+    id = 2, start = 21.0, end_ = 22.0, text = "clip B",
+    words = { self.word { word = "B", start = 21.0, end_ = 22.0, probability = 1.0 } },
+  })
+  t:update()
+  t:sort('start', false)  -- descending: clip B (111) before clip A (101)
+  lu.assertEquals(t.data[1]:get('text'), "clip B")
+
+  -- A subsequent update() (e.g. Refresh) must preserve the descending sort.
+  t:update()
+  lu.assertEquals(t.data[1]:get('text'), "clip B")
+  lu.assertEquals(t.data[2]:get('text'), "clip A")
+end
+
+function TestTranscript:testUpdateDefaultsToStartAscending()
+  configure_two_clips()
+  local t = Transcript.new()
+  -- Insertion order is clip B then clip A (i.e. not start order).
+  t:add_segment(self.segment {
+    id = 1, start = 21.0, end_ = 22.0, text = "clip B",
+    words = { self.word { word = "B", start = 21.0, end_ = 22.0, probability = 1.0 } },
+  })
+  t:add_segment(self.segment {
+    id = 2, start = 1.0, end_ = 2.0, text = "clip A",
+    words = { self.word { word = "A", start = 1.0, end_ = 2.0, probability = 1.0 } },
+  })
+  t:update()
+  -- With no explicit sort, update() defaults to start ascending.
+  lu.assertEquals(t._sort_column, 'start')
+  lu.assertEquals(t.data[1]:get('text'), "clip A")
+  lu.assertEquals(t.data[2]:get('text'), "clip B")
+end
+
+--
+-- Edge-case hardening (timeline & transcript robustness)
+--
+
+function TestTranscript:testClipBoundsZeroPlayrate()
+  -- A zero playrate yields a zero-width clip; clip_bounds must report it as
+  -- invalid (0, 0) rather than a degenerate range.
+  reaper.__set_item_info('zp_item', 'D_LENGTH', 5)
+  reaper.__set_take_info('zp_take', 'D_STARTOFFS', 2)
+  reaper.__set_take_info('zp_take', 'D_PLAYRATE', 0)
+  local clip_start, clip_end = TranscriptSegment.clip_bounds('zp_item', 'zp_take')
+  lu.assertEquals(clip_start, 0)
+  lu.assertEquals(clip_end, 0)
+end
+
+function TestTranscript:testClipBoundsNegativePlayrate()
+  -- A negative playrate would invert the clip bounds; treat it as invalid.
+  reaper.__set_item_info('np_item', 'D_LENGTH', 5)
+  reaper.__set_take_info('np_take', 'D_STARTOFFS', 2)
+  reaper.__set_take_info('np_take', 'D_PLAYRATE', -1)
+  local clip_start, clip_end = TranscriptSegment.clip_bounds('np_item', 'np_take')
+  lu.assertEquals(clip_start, 0)
+  lu.assertEquals(clip_end, 0)
+end
+
+function TestTranscript:testBuildClipIndexSkipsZeroLengthItem()
+  -- A zero-length item produces a zero-width clip whose clip_end equals its
+  -- startoffs. With startoffs > 0 the old `clip_end > 0` filter would have
+  -- accepted it; clip_bounds now returns (0, 0) so it is excluded from the index.
+  reaper.__set_item_info('zl_item', 'D_POSITION', 100)
+  reaper.__set_item_info('zl_item', 'D_LENGTH', 0)
+  reaper.__set_take_info('zl_take', 'D_STARTOFFS', 2)
+  reaper.__set_take_info('zl_take', 'D_PLAYRATE', 1)
+  reaper.CountMediaItems = function () return 1 end
+  reaper.GetMediaItem = function (_, i) return i == 0 and 'zl_item' or nil end
+  reaper.GetActiveTake = function () return 'zl_take' end
+
+  local t = Transcript.new()
+  local index = t:build_clip_index()
+  lu.assertNil(index['test_audio.wav'])
+end
+
+function TestTranscript:testResolveTimelineNilTimesNoCrash()
+  -- A segment with no words and no start/end must not crash timeline resolution
+  -- (regression: timeline_time_for compared a nil time against a number).
+  configure_two_clips()
+  local t = Transcript.new()
+  t:add_segment(self.segment {
+    id = 1, text = "no timing",
+  })
+  t:update()
+  local seg = t.data[1]
+  lu.assertNil(seg:get('start'))
+  lu.assertNil(seg:get('end'))
+end
+
+function TestTranscript:testResolveTimelineEndPastClipEdge()
+  -- The last word's start lands on clip A (source 8 -> 108) but its end runs into
+  -- the removed gap (source 12, off-timeline). The resolved end must not collapse
+  -- onto the start; it falls back to the last mapped on-clip time.
+  configure_two_clips()
+  local t = Transcript.new()
+  t:add_segment(self.segment {
+    id = 1, start = 2.0, end_ = 12.0, text = "runs past edge",
+    words = {
+      self.word { word = "on", start = 2.0, end_ = 4.0, probability = 1.0 },
+      self.word { word = "edge", start = 8.0, end_ = 12.0, probability = 1.0 },
+    },
+  })
+  t:update()
+  local seg = t.data[1]
+  -- source 2 -> 102 (first word start); source 8 -> 108 (last on-clip word start)
+  lu.assertAlmostEquals(seg:get('start'), 102.0, 0.001)
+  lu.assertAlmostEquals(seg:get('end'), 108.0, 0.001)
+  lu.assertTrue(seg:get('end') > seg:get('start'))
+end
 
 os.exit(lu.LuaUnit.run())

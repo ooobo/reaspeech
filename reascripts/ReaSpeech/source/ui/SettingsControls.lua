@@ -40,19 +40,31 @@ function SettingsControls:init()
 
   self:init_model()
   self:init_logging()
+  self:init_editor_view()
   self:init_layout()
 end
 
+function SettingsControls:init_editor_view()
+  if not (app and app.settings and app.settings.editor_view_enabled) then return end
+
+  self.editor_view = Widgets.Checkbox.new {
+    state = app.settings.editor_view_enabled,
+    label_long = 'BETA: Editor view, edit audio as transcript',
+    label_short = 'BETA: Editor view',
+  }
+end
+
 function SettingsControls:init_model()
-  -- Access the shared ASR model setting
+  -- Access the shared ASR settings
   local asr_plugin = app.plugins:get_plugin('asr')
   if asr_plugin and asr_plugin._controls then
     self.model_name = asr_plugin._controls.model_name
+    self.diarize = asr_plugin._controls.diarize
   end
 end
 
 function SettingsControls:init_layout()
-  local renderers = { self.render_font_size, self.render_logging }
+  local renderers = { self.render_font_size, self.render_logging, self.render_editor_view }
 
   self.layout = ColumnLayout.new {
     column_padding = ReaSpeechControlsUI.COLUMN_PADDING,
@@ -107,6 +119,16 @@ function SettingsControls:render_model()
   if self.model_name then
     self.model_name:render()
   end
+  if self.diarize then
+    self.diarize:render()
+  end
+end
+
+function SettingsControls:render_editor_view()
+  if not self.editor_view then return end
+
+  ReaSpeechControlsUI:render_input_label('Experimental')
+  self.editor_view:render()
 end
 
 function SettingsControls:render_logging()

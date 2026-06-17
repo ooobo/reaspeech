@@ -37,9 +37,11 @@ function ASRControls:init()
 
   self.settings = {
     model_name = storage:string('model_name', self.DEFAULT_MODEL_NAME),
+    diarize = storage:boolean('diarize', false),
   }
 
   self:init_model_name()
+  self:init_diarize()
 
   self.actions = ASRActions.new(self.plugin)
   self.alert_popup = AlertPopup.new {}
@@ -57,18 +59,15 @@ function ASRControls:init_model_name()
   }
 end
 
-function ASRControls:init_layouts()
-  self:init_actions_layout()
+function ASRControls:init_diarize()
+  self.diarize = Widgets.Checkbox.new {
+    state = self.settings.diarize,
+    label_long = 'Identify speakers (can take 1.5-2x longer to transcribe)',
+    label_short = 'Identify speakers',
+  }
 end
 
-function ASRControls:init_actions_layout()
-  -- Actions are now rendered in ReaSpeechControlsUI below the logo
-  self.actions_layout = ColumnLayout.new {
-    column_padding = 10,
-    margin_left = ReaSpeechControlsUI.MARGIN_LEFT,
-    num_columns = 1,
-    render_column = function(_column) end
-  }
+function ASRControls:init_layouts()
 end
 
 function ASRControls:render_bg()
@@ -76,7 +75,6 @@ function ASRControls:render_bg()
 end
 
 function ASRControls:render()
-  self.actions_layout:render()
   self.alert_popup:render()
 
   local margin = ReaSpeechControlsUI.MARGIN_LEFT
@@ -115,13 +113,14 @@ end
 function ASRControls:get_request_data()
   return {
     model_name = self.model_name:value(),
+    diarize = self.diarize:value(),
   }
 end
 
 function ASRControls:get_model_labels()
   local model_labels = {}
 
-  for _, model in pairs(Models.MODELS) do
+  for _, model in ipairs(Models.MODELS) do
     model_labels[model.name] = model.label
   end
 

@@ -5,11 +5,12 @@
 ]]--
 
 Transcript = Polo {
-  COLUMN_ORDER = {"id", "start", "end", "raw-start", "raw-end", "text", "score", "file", "avg_logprob"},
+  COLUMN_ORDER = {"id", "start", "end", "raw-start", "raw-end", "text", "score", "file", "track", "avg_logprob"},
   DEFAULT_HIDE = {
     seek = true, temperature = true, tokens = true, avg_logprob = true,
     compression_ratio = true, no_speech_prob = true,
-    ['raw-start'] = true, ['raw-end'] = true
+    ['raw-start'] = true, ['raw-end'] = true,
+    score = true, speaker = true,
   },
 
   init = function(self)
@@ -32,6 +33,10 @@ function Transcript:clear()
   self.filtered_data = {}
   self.data = {}
   self.search = ''
+  -- Remembered sort, re-applied by update() so Refresh/search keep the active
+  -- order. Defaults to timeline start ascending (matches the default sort arrow).
+  self._sort_column = 'start'
+  self._sort_ascending = true
   -- Store raw transcription data for regeneration
   -- Format: { path = "file.wav", segments = {...} }
   self.raw_transcriptions = self.raw_transcriptions or {}
@@ -40,7 +45,7 @@ end
 function Transcript:get_columns()
   if #self.init_data > 0 then
     -- Include virtual columns that are computed in TranscriptSegment:get()
-    local columns = {"score", "file", "raw-start", "raw-end"}
+    local columns = {"score", "file", "track", "raw-start", "raw-end"}
     local row = self.init_data[1]
     for k, _ in pairs(row.data) do
       if k:sub(1, 1) ~= '_' then
@@ -60,25 +65,25 @@ function Transcript:_sort_columns(columns)
   local order_set = {}
   local result = {}
 
-  for _, column in pairs(columns) do
+  for _, column in ipairs(columns) do
     column_set[column] = true
   end
 
-  for _, column in pairs(order) do
+  for _, column in ipairs(order) do
     order_set[column] = true
     if column_set[column] then
       table.insert(result, column)
     end
   end
 
-  for _, column in pairs(columns) do
+  for _, column in ipairs(columns) do
     if not order_set[column] then
       table.insert(extra_columns, column)
     end
   end
 
   table.sort(extra_columns)
-  for _, column in pairs(extra_columns) do
+  for _, column in ipairs(extra_columns) do
     table.insert(result, column)
   end
 
@@ -105,7 +110,7 @@ function Transcript:regenerate()
   self.init_data = {}
 
   -- For each transcribed file, find all items on timeline and regenerate segments
-  for _, transcription in pairs(self.raw_transcriptions) do
+  for _, transcription in ipairs(self.raw_transcriptions) do
     local path = transcription.path
     local segments = transcription.segments
 
@@ -116,28 +121,22 @@ function Transcript:regenerate()
     local matching_items = self:find_items_by_path(path)
 
     -- For each segment, create entries for all matching items where it appears
-    for _, segment in pairs(segments) do
+    for _, segment in ipairs(segments) do
       local created_any = false
 
-      for _, entry in pairs(matching_items) do
+      for _, entry in ipairs(matching_items) do
         local item = entry.item
         local take = entry.take
 
         -- Check if this segment is within this item's clip boundaries
-        if reaper.ValidatePtr2(0, item, 'MediaItem*') and reaper.ValidatePtr2(0, take, 'MediaItem_Take*') then
-          local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
-          local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
-          local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
-
-          local source_length = item_length * playrate
-          local clip_end = startoffs + source_length
-
+        local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+        if clip_end > 0 then
           -- Check if segment overlaps the clipped portion
-          if segment['end'] > startoffs and segment.start < clip_end then
+          if segment['end'] > clip_start and segment.start < clip_end then
             -- Create segment for this item/take
             local from_response = TranscriptSegment.from_response(segment, item, take)
 
-            for _, s in pairs(from_response) do
+            for _, s in ipairs(from_response) do
               if s:get('text') then
                 self:add_segment(s)
                 created_any = true
@@ -201,6 +200,59 @@ function Transcript:find_items_by_path(path)
   return matching_items
 end
 
+-- Build an index of every project media item keyed by its source file path.
+-- Each entry carries the timeline position and source-time bounds needed to map
+-- a source-file time onto the timeline. Returns {} when the required Reaper APIs
+-- are unavailable (e.g. in unit tests without item mocks), which makes
+-- resolve_timeline_times fall back to the legacy single-clip computation.
+function Transcript:build_clip_index()
+  local index = {}
+  if not (reaper.CountMediaItems and reaper.GetActiveTake
+      and reaper.GetMediaItemTake_Source and reaper.GetMediaSourceFileName) then
+    return index
+  end
+
+  local num_items = reaper.CountMediaItems(0)
+  for i = 0, num_items - 1 do
+    local item = reaper.GetMediaItem(0, i)
+    local take = item and reaper.GetActiveTake(item)
+    if take then
+      local source = reaper.GetMediaItemTake_Source(take)
+      if source then
+        local path = reaper.GetMediaSourceFileName(source)
+        if path and path ~= '' then
+          local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+          -- (0, 0) means invalid pointers; a real clip always has clip_end > 0.
+          if clip_end > 0 then
+            if not index[path] then index[path] = {} end
+            table.insert(index[path], {
+              item = item,
+              take = take,
+              position = reaper.GetMediaItemInfo_Value(item, 'D_POSITION'),
+              startoffs = clip_start,
+              clip_end = clip_end,
+            })
+          end
+        end
+      end
+    end
+  end
+
+  return index
+end
+
+-- Re-resolve every segment's timeline start/end against the current timeline,
+-- word by word, so segments spanning edited gaps still map to wherever their
+-- audio actually lives. Runs from update() (transcription, Refresh, search) -
+-- never per render frame.
+function Transcript:resolve_timeline_times()
+  self._clip_index = self:build_clip_index()
+  for _, segment in ipairs(self.init_data) do
+    local path = segment.data['_source_path']
+    segment:resolve_timeline(path and self._clip_index[path] or nil)
+  end
+end
+
 function Transcript:has_segments()
   return #self.init_data > 0
 end
@@ -214,7 +266,7 @@ function Transcript:get_segments()
 end
 
 function Transcript:has_words()
-  for _, segment in pairs(self.init_data) do
+  for _, segment in ipairs(self.init_data) do
     if segment.words then return true end
   end
   return false
@@ -290,7 +342,12 @@ function Transcript:set_name(name)
 end
 
 function Transcript:sort(column, ascending)
-  self.data = {table.unpack(self.filtered_data)}
+  -- Remember the active sort so update() can re-apply it (Refresh/search).
+  self._sort_column = column
+  self._sort_ascending = ascending
+  local copy = {}
+  for i = 1, #self.filtered_data do copy[i] = self.filtered_data[i] end
+  self.data = copy
   table.sort(self.data, function (a, b)
     local a_val, b_val = a:get(column), b:get(column)
 
@@ -373,7 +430,7 @@ function Transcript:to_table()
   -- Use init_data (source of truth) not self.data (filtered/sorted view)
   -- to avoid losing segments that are hidden by an active search filter
   local segments = {}
-  for _, segment in pairs(self.init_data) do
+  for _, segment in ipairs(self.init_data) do
     table.insert(segments, segment:to_table())
   end
 
@@ -394,7 +451,7 @@ function Transcript.from_json(json_str)
     name = data.name or ''
   }
 
-  for _, segment_data in pairs(data.segments) do
+  for _, segment_data in ipairs(data.segments) do
     local segment = TranscriptSegment.from_table(segment_data)
     t:add_segment(segment)
   end
@@ -408,7 +465,20 @@ function Transcript:update()
     return
   end
 
+  self:resolve_timeline_times()
+
   local columns = self:get_columns()
+
+  -- Start with all data, then apply segment filter and search
+  local source_data = self.init_data
+  if self.segment_filter then
+    source_data = {}
+    for _, segment in ipairs(self.init_data) do
+      if self.segment_filter(segment) then
+        table.insert(source_data, segment)
+      end
+    end
+  end
 
   if #self.search > 0 then
     local search = self.search
@@ -416,9 +486,9 @@ function Transcript:update()
     local match_case = (search ~= search_lower)
     self.filtered_data = {}
 
-    for _, segment in pairs(self.init_data) do
+    for _, segment in ipairs(source_data) do
       local matching = false
-      for _, column in pairs(columns) do
+      for _, column in ipairs(columns) do
         if match_case then
           if tostring(segment.data[column]):find(search) then
             matching = true
@@ -436,8 +506,13 @@ function Transcript:update()
       end
     end
   else
-    self.filtered_data = self.init_data
+    self.filtered_data = source_data
   end
 
   self.data = self.filtered_data
+
+  -- Re-apply the active sort so Refresh/search don't drop back to source order.
+  if self._sort_column then
+    self:sort(self._sort_column, self._sort_ascending)
+  end
 end

@@ -38,38 +38,75 @@ function TranscriptSegment:init()
   end
 end
 
+TranscriptSegment._tokens_to_words = function(tokens)
+  local words = {}
+  for _, tok in ipairs(tokens) do
+    local text = tok.token
+    local word_start = text:match('^[%s\xe2\x96\x81]') ~= nil or #words == 0
+    -- Digit after non-digit indicates a word boundary (e.g. "the" + "24")
+    if not word_start and #words > 0 and text:match('^%d') then
+      local prev_last = words[#words].word:sub(-1)
+      if not prev_last:match('%d') then
+        word_start = true
+      end
+    end
+    text = text:match('^[\xe2\x96\x81%s]+(.*)') or text
+    if #text == 0 then goto continue end
+    table.insert(words, TranscriptWord.new({
+      word = text,
+      word_start = word_start,
+      start = tok.start,
+      end_ = tok['end'],
+      probability = 1.0,
+    }))
+    ::continue::
+  end
+  return words
+end
+
+TranscriptSegment._words_to_text = function(words)
+  local parts = {}
+  for _, w in ipairs(words) do
+    if w.word_start and #parts > 0 then
+      table.insert(parts, ' ')
+    end
+    table.insert(parts, w.word)
+  end
+  return table.concat(parts)
+end
+
 TranscriptSegment.from_response = function(segment, item, take)
   local result = {}
-  local words = segment.words
+  local raw_words = segment.words
+  local raw_tokens = segment.tokens
 
   segment = TranscriptSegment._copy(segment)
   segment.text = segment.text:match("^%s*(.-)%s*$")
   segment.words = nil
+  segment.tokens = nil
 
-  if words then
-    local transcript_words = {}
-    for _, word in pairs(words) do
-      local transcript_word = TranscriptWord.new({
+  local transcript_words = nil
+  if raw_tokens then
+    transcript_words = TranscriptSegment._tokens_to_words(raw_tokens)
+    segment.text = TranscriptSegment._words_to_text(transcript_words)
+  elseif raw_words then
+    transcript_words = {}
+    for _, word in ipairs(raw_words) do
+      table.insert(transcript_words, TranscriptWord.new({
         word = word.word:match("^%s*(.-)%s*$"),
         probability = word.probability,
         start = word.start,
         end_ = word['end']
-      })
-      table.insert(transcript_words, transcript_word)
+      }))
     end
-    table.insert(result, TranscriptSegment.new({
-      data = segment,
-      item = item,
-      take = take,
-      words = transcript_words
-    }))
-  else
-    table.insert(result, TranscriptSegment.new({
-      data = segment,
-      item = item,
-      take = take
-    }))
   end
+
+  table.insert(result, TranscriptSegment.new({
+    data = segment,
+    item = item,
+    take = take,
+    words = transcript_words
+  }))
 
   return result
 end
@@ -82,7 +119,7 @@ TranscriptSegment.from_table = function(data)
 
   if words then
     local transcript_words = {}
-    for _, word in pairs(words) do
+    for _, word in ipairs(words) do
       table.insert(transcript_words, TranscriptWord.from_table(word))
     end
     data.words = transcript_words
@@ -118,6 +155,7 @@ TranscriptSegment.merge_words = function(words, index1, index2)
   local word2 = words[index2]
   local new_word = TranscriptWord.new {
     word = word1.word .. word2.word,
+    word_start = word1.word_start,
     start = word1.start,
     end_ = word2.end_,
     probability = (word1.probability + word2.probability) / 2
@@ -159,7 +197,7 @@ end
 function TranscriptSegment:score()
   local score = 0.0
   if self.words and #self.words > 0 then
-    for _, word in pairs(self.words) do
+    for _, word in ipairs(self.words) do
       score = score + word:score()
     end
     return score / #self.words
@@ -171,11 +209,15 @@ end
 function TranscriptSegment:get(column, default)
   if column == 'score' then
     return self:score()
+  elseif column == 'track' then
+    return self:get_track_name() or default
   elseif column == 'start' then
-    -- Return timeline start time for consistency with UI display and sorting
+    -- Prefer word-level resolved timeline time (see resolve_timeline); fall back
+    -- to the single-clip computation when resolution hasn't run.
+    if self._tl_resolved then return self._tl_start end
     return self:timeline_start_time()
   elseif column == 'end' then
-    -- Return timeline end time for consistency with UI display and sorting
+    if self._tl_resolved then return self._tl_end end
     return self:timeline_end_time()
   elseif column == 'raw-start' then
     return self.data['start']
@@ -188,17 +230,23 @@ function TranscriptSegment:get(column, default)
   end
 end
 
+function TranscriptSegment:get_track_name()
+  if not self.item or not reaper.ValidatePtr2(0, self.item, 'MediaItem*') then
+    return nil
+  end
+  local track = reaper.GetMediaItemTrack(self.item)
+  if not track then return nil end
+  local _, name = reaper.GetSetMediaTrackInfo_String(track, 'P_NAME', '', false)
+  return name ~= '' and name or nil
+end
+
 function TranscriptSegment:set_words(words)
   self.words = words
   self:update_text()
 end
 
 function TranscriptSegment:update_text()
-  local text_chunks = {}
-  for _, word in pairs(self.words) do
-    table.insert(text_chunks, word.word)
-  end
-  self.data['text'] = table.concat(text_chunks, ' ')
+  self.data['text'] = TranscriptSegment._words_to_text(self.words)
 end
 
 function TranscriptSegment:get_file(include_extensions)
@@ -263,39 +311,38 @@ function TranscriptSegment:navigate(word_index, autoplay)
   end
 end
 
-function TranscriptSegment:is_on_timeline()
-  -- Validate that item and take are still valid (they become invalid if cut/pasted)
-  if not reaper.ValidatePtr2(0, self.item, 'MediaItem*') then
-    return false
+-- Static: compute clip source-time bounds from item/take.
+-- Returns (clip_start, clip_end) or (0, 0) if pointers are invalid.
+function TranscriptSegment.clip_bounds(item, take)
+  if not reaper.ValidatePtr2(0, item, 'MediaItem*') then
+    return 0, 0
   end
-  if not reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
-    return false
+  if not reaper.ValidatePtr2(0, take, 'MediaItem_Take*') then
+    return 0, 0
   end
-
-  local startoffs = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
-  local item_length = reaper.GetMediaItemInfo_Value(self.item, 'D_LENGTH')
-  local playrate = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_PLAYRATE')
-
-  -- Adjust item length for playrate to get source length
+  local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
+  local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
+  local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
   local source_length = item_length * playrate
-  local clip_end = startoffs + source_length
+  -- A zero/negative playrate or length yields a degenerate (zero- or negative-
+  -- width) clip. Treat it as invalid so it can't shadow a real clip during
+  -- timeline resolution or be reported as on-timeline.
+  if not source_length or source_length <= 0 then
+    return 0, 0
+  end
+  return startoffs, startoffs + source_length
+end
 
-  -- Check if segment overlaps the clipped portion of the file
-  return self.end_ > startoffs and self.start < clip_end
+function TranscriptSegment:is_on_timeline()
+  local clip_start, clip_end = TranscriptSegment.clip_bounds(self.item, self.take)
+  if clip_start == 0 and clip_end == 0 then
+    return false
+  end
+  return self.end_ > clip_start and self.start < clip_end
 end
 
 function TranscriptSegment:_clip_bounds()
-  if not reaper.ValidatePtr2(0, self.item, 'MediaItem*') then
-    return 0, 0
-  end
-  if not reaper.ValidatePtr2(0, self.take, 'MediaItem_Take*') then
-    return 0, 0
-  end
-  local startoffs = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
-  local item_length = reaper.GetMediaItemInfo_Value(self.item, 'D_LENGTH')
-  local playrate = reaper.GetMediaItemTakeInfo_Value(self.take, 'D_PLAYRATE')
-  local source_length = item_length * playrate
-  return startoffs, startoffs + source_length
+  return TranscriptSegment.clip_bounds(self.item, self.take)
 end
 
 function TranscriptSegment:timeline_start_time()
@@ -324,6 +371,78 @@ function TranscriptSegment:timeline_end_time()
     - reaper.GetMediaItemTakeInfo_Value(self.take, 'D_STARTOFFS')
 end
 
+-- Static: map a source-file time `t` onto the timeline using a list of clips for
+-- the segment's source file. Each clip is { item, take, position, startoffs,
+-- clip_end } as produced by Transcript:build_clip_index. Returns
+-- (timeline_time, item, take) for the first clip whose source range contains `t`,
+-- or nil when `t` falls in a region not placed on the timeline.
+function TranscriptSegment.timeline_time_for(t, clips)
+  if not clips or not t then return nil end
+  for _, clip in ipairs(clips) do
+    if t >= clip.startoffs and t <= clip.clip_end then
+      return clip.position + (t - clip.startoffs), clip.item, clip.take
+    end
+  end
+  return nil
+end
+
+-- Resolve word-accurate timeline start/end against the current clips of this
+-- segment's source file. `clips` is the per-file list from
+-- Transcript:build_clip_index (may be nil/empty). When clips are available the
+-- result is cached in _tl_start/_tl_end and a representative item/take is recorded
+-- for sorting and navigation; the segment is marked off-timeline (nil times) only
+-- when none of its audio lands on a clip. When no clips are supplied (e.g. the
+-- file isn't in the project), resolution is skipped so get() falls back to the
+-- legacy single-clip computation.
+function TranscriptSegment:resolve_timeline(clips)
+  if not clips or #clips == 0 then
+    self._tl_resolved = false
+    return
+  end
+
+  self._tl_resolved = true
+  self._tl_start = nil
+  self._tl_end = nil
+
+  local first_t, first_item, first_take, last_t
+
+  local function consider(start_t, end_t)
+    local ts, item, take = TranscriptSegment.timeline_time_for(start_t, clips)
+    if ts and not first_t then
+      first_t, first_item, first_take = ts, item, take
+    end
+    local te = TranscriptSegment.timeline_time_for(end_t, clips)
+    if te then
+      last_t = math.max(last_t or te, te)
+    elseif ts then
+      -- The end fell off a clip (e.g. audio runs past a trimmed edge) but the
+      -- start landed on one. Fall back to the mapped start so the segment keeps
+      -- a non-zero duration instead of collapsing _tl_end onto _tl_start.
+      last_t = math.max(last_t or ts, ts)
+    end
+  end
+
+  if self.words and #self.words > 0 then
+    for _, w in ipairs(self.words) do
+      consider(w.start, w.end_)
+    end
+  end
+
+  -- Fall back to the segment span when there are no words, or none landed on a clip.
+  if not first_t then
+    consider(self.start, self.end_)
+  end
+
+  if first_t then
+    self._tl_start = first_t
+    self._tl_end = math.max(last_t or first_t, first_t)
+    if first_item and first_take then
+      self.item = first_item
+      self.take = first_take
+    end
+  end
+end
+
 function TranscriptSegment:_navigate_to_media_item(item)
   reaper.SelectAllMediaItems(0, false)
   reaper.SetMediaItemSelected(item, true)
@@ -346,7 +465,7 @@ function TranscriptSegment:to_table()
   local result = self._copy(self.data)
   if self.words then
     result['words'] = {}
-    for _, word in pairs(self.words) do
+    for _, word in ipairs(self.words) do
       table.insert(result['words'], word:to_table())
     end
   end

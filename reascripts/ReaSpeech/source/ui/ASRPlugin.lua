@@ -28,6 +28,7 @@ function ASRPlugin:asr(jobs)
 
   local options = {
     model = controls_data.model_name,
+    diarize = controls_data.diarize,
   }
 
   -- consolidate jobs by path, retaining a collection of
@@ -37,7 +38,7 @@ function ASRPlugin:asr(jobs)
 
   local consolidated_jobs = {}
   local seen_path_index = {}
-  for _, job in pairs(jobs) do
+  for _, job in ipairs(jobs) do
     local path = job.path
 
     if not seen_path_index[path] then
@@ -80,57 +81,109 @@ function ASRPlugin:handle_response(job_count)
     local segments = response[1].segments
     local job = response._job
 
-    -- Store raw transcription data for later regeneration
-    -- Include first item/take as fallback reference for when clips are removed from timeline
     local fallback_item = job.project_entries[1] and job.project_entries[1].item
     local fallback_take = job.project_entries[1] and job.project_entries[1].take
-    transcript:add_raw_transcription(job.path, segments, fallback_item, fallback_take)
 
-    -- For each transcription segment, create entries for ALL item/take pairs where it appears
-    -- This creates duplicate entries when the same audio appears multiple times on timeline
-    for _, segment in pairs(segments) do
-      local created_any = false
+    -- Merge short fragment segments into previous when they are adjacent
+    -- (e.g. "D." + "C." -> "D.C." from the same chunk boundary)
+    local merged = {}
+    for _, segment in ipairs(segments) do
+      local text = (segment.text or ''):match("^%s*(.-)%s*$")
+      local prev = merged[#merged]
+      -- Only merge if fragment is short AND adjacent (gap < 0.5s) to previous.
+      -- Require both timestamps so a segment missing timing can't crash the math.
+      if prev and #text <= 4 and segment.start and prev['end']
+          and (segment.start - prev['end']) < 0.5 then
+        prev.text = prev.text .. ' ' .. text
+        prev['end'] = segment['end']
+        if prev.tokens and segment.tokens then
+          for _, tok in ipairs(segment.tokens) do
+            table.insert(prev.tokens, tok)
+          end
+        end
+        if prev.words and segment.words then
+          for _, w in ipairs(segment.words) do
+            table.insert(prev.words, w)
+          end
+        end
+      else
+        table.insert(merged, segment)
+      end
+    end
+    segments = merged
 
-      -- Check each item/take pair where the file appears
-      for _, project_entry in pairs(job.project_entries) do
-        local item = project_entry.item
-        local take = project_entry.take
-
-        -- Check if this segment is within this item's clip boundaries
-        local startoffs = reaper.GetMediaItemTakeInfo_Value(take, 'D_STARTOFFS')
-        local item_length = reaper.GetMediaItemInfo_Value(item, 'D_LENGTH')
-        local playrate = reaper.GetMediaItemTakeInfo_Value(take, 'D_PLAYRATE')
-
-        local source_length = item_length * playrate
-        local clip_end = startoffs + source_length
-
-        -- Check if segment overlaps the clipped portion
-        if segment['end'] > startoffs and segment.start < clip_end then
-          -- Create segment for this item/take
-          local from_response = TranscriptSegment.from_response(segment, item, take)
-
-          for _, s in pairs(from_response) do
-            if s:get('text') then
-              transcript:add_segment(s)
-              created_any = true
+    -- Deduplicate overlapping segments from chunk boundaries.
+    -- Only dedup when text matches AND timestamps substantially overlap,
+    -- so legitimately repeated phrases are preserved.
+    local seen_segments = {}
+    for _, segment in ipairs(segments) do
+      local text = (segment.text or ''):match("^%s*(.-)%s*$")
+      local s_start, s_end = segment.start, segment['end']
+      local dominated = false
+      if seen_segments[text] and s_start and s_end then
+        for _, prev in ipairs(seen_segments[text]) do
+          -- Consider it a duplicate only if the overlap is > 50% of the shorter segment
+          if prev.start_time and prev.end_time then
+            local overlap = math.max(0,
+              math.min(s_end, prev.end_time) - math.max(s_start, prev.start_time))
+            local shorter = math.min(
+              s_end - s_start,
+              prev.end_time - prev.start_time)
+            if shorter > 0 and overlap / shorter > 0.5 then
+              dominated = true
+              break
             end
           end
         end
       end
+      if dominated then
+        goto next_segment
+      end
+      if not seen_segments[text] then seen_segments[text] = {} end
+      table.insert(seen_segments[text], { start_time = s_start, end_time = s_end })
 
-      -- If segment wasn't on timeline in any clip, create with first item/take as fallback
-      if not created_any and job.project_entries[1] then
-        local item = job.project_entries[1].item
-        local take = job.project_entries[1].take
-        local from_response = TranscriptSegment.from_response(segment, item, take)
+      -- Assign segment to the clip with the most overlap to avoid duplicates.
+      -- Without segment timing there is nothing to score, so we fall back to the
+      -- first project entry below.
+      local best_entry = nil
+      local best_overlap = 0
 
-        for _, s in pairs(from_response) do
+      if s_start and s_end then
+        for _, project_entry in ipairs(job.project_entries) do
+          local item = project_entry.item
+          local take = project_entry.take
+
+          local clip_start, clip_end = TranscriptSegment.clip_bounds(item, take)
+
+          local overlap = math.max(0,
+            math.min(s_end, clip_end) - math.max(s_start, clip_start))
+
+          if overlap > best_overlap then
+            best_overlap = overlap
+            best_entry = project_entry
+          end
+        end
+      end
+
+      if not best_entry then
+        best_entry = job.project_entries[1]
+      end
+
+      if best_entry then
+        local from_response = TranscriptSegment.from_response(
+          segment, best_entry.item, best_entry.take)
+        for _, s in ipairs(from_response) do
           if s:get('text') then
             transcript:add_segment(s)
           end
         end
       end
+
+      ::next_segment::
     end
+
+    -- Store processed segments for later regeneration
+    transcript:add_raw_transcription(job.path, segments, fallback_item, fallback_take)
 
     transcript:update()
     -- Sort by start time ascending by default for most useful view
